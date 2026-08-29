@@ -1,0 +1,12 @@
+﻿simv
+simv.daidir/
+csrc/
+ucli.key
+*.vpd
+*.fsdb
+*.log
+verdiLog/
+novas.*
+*.ddc
+*.svf
+work/
