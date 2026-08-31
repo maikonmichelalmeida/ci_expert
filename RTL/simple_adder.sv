@@ -1,4 +1,4 @@
-﻿module simple_adder #(
+module simple_adder #(
     parameter WIDTH = 8
 ) (
     input  logic [WIDTH-1:0] a,

@@ -1,12 +1,9 @@
-﻿# CI Expert
+# CI Expert - smoke test inicial
 
-Projeto RTL para desenvolvimento de um núcleo RISC-V RV32I pipelined.
+Pacote de teste minimo para validar o fluxo do projeto no servidor UFRGS com Synopsys VCS e Verdi.
 
-Estrutura:
+O projeto principal continua sendo o desenvolvimento de um nucleo RISC-V RV32I pipelined.
 
-- RTL/  - módulos RTL
-- tb/   - testbenches
-- RUN/  - arquivos de simulação
-- SYN/  - scripts de síntese
-- docs/ - documentação
-- sw/   - programas assembly/C para testes
+Para executar o teste, consulte:
+
+`RUN/PROCEDIMENTO_TESTE.md`

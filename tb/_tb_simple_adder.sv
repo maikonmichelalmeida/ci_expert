@@ -1,22 +1,30 @@
-﻿module tb_simple_adder;
+module tb_simple_adder;
 
     logic [7:0] a;
     logic [7:0] b;
     logic [8:0] sum;
 
     simple_adder dut (
-        .a(a),
-        .b(b),
-        .sum(sum)
+        .a   (a),
+        .b   (b),
+        .sum (sum)
     );
 
     initial begin
+        $fsdbDumpfile("test.fsdb");
+        $fsdbDumpvars(0, tb_simple_adder);
+        $fsdbDumpMDA(0, tb_simple_adder);
+    end
+
+    initial begin
+        $display("=== SIMPLE ADDER SMOKE TEST ===");
+
         a = 8'd10;
         b = 8'd5;
         #1;
 
         if (sum !== 9'd15)
-            $error("ERRO: 10 + 5 = %0d", sum);
+            $error("FAIL: 10 + 5 = %0d (expected 15)", sum);
         else
             $display("PASS: 10 + 5 = %0d", sum);
 
@@ -25,10 +33,12 @@
         #1;
 
         if (sum !== 9'd300)
-            $error("ERRO: 200 + 100 = %0d", sum);
+            $error("FAIL: 200 + 100 = %0d (expected 300)", sum);
         else
             $display("PASS: 200 + 100 = %0d", sum);
 
+        #20;
+        $display("=== TEST FINISHED ===");
         $finish;
     end
 
