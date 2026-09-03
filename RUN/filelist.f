@@ -2,6 +2,7 @@
 ../RTL/riscv_system_top.sv
 ../RTL/riscv_core.sv
 ../RTL/datapath.sv
+../RTL/alu.sv
 ../RTL/control_unit.sv
 ../RTL/hazard_unit.sv
 ../RTL/instruction_memory.sv
