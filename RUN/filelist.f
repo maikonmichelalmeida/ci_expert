@@ -1,2 +1,8 @@
-../tb/_tb_simple_adder.sv
-../RTL/simple_adder.sv
+../tb/_tb_riscv_system_top.sv
+../RTL/riscv_system_top.sv
+../RTL/riscv_core.sv
+../RTL/datapath.sv
+../RTL/control_unit.sv
+../RTL/hazard_unit.sv
+../RTL/instruction_memory.sv
+../RTL/data_memory.sv

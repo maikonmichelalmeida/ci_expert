@@ -1,13 +1,19 @@
-# Smoke test no servidor UFRGS - VCS + Verdi
+# Teste do esqueleto RV32I no servidor UFRGS - VCS + Verdi
 
-Este pacote preserva a estrutura simples atualmente usada no repositorio:
+O projeto contem somente a hierarquia inicial do futuro RV32I:
 
 ```text
-ci_expert/
+projeto/
 |-- RTL/
-|   `-- simple_adder.sv
+|   |-- riscv_system_top.sv
+|   |-- riscv_core.sv
+|   |-- datapath.sv
+|   |-- control_unit.sv
+|   |-- hazard_unit.sv
+|   |-- instruction_memory.sv
+|   `-- data_memory.sv
 |-- tb/
-|   `-- _tb_simple_adder.sv
+|   `-- _tb_riscv_system_top.sv
 |-- RUN/
 |   |-- filelist.f
 |   `-- PROCEDIMENTO_TESTE.md
@@ -18,7 +24,8 @@ ci_expert/
 
 ## Objetivo
 
-Validar o fluxo minimo antes de iniciar os modulos do RV32I:
+Validar a compilacao e a conectividade da hierarquia antes de implementar os
+circuitos do RV32I:
 
 ```text
 RTL + testbench
@@ -40,6 +47,8 @@ O teste verifica:
 
 - compilacao SystemVerilog;
 - ordem de compilacao pelo `filelist.f`;
+- passagem de `clock` e `reset` pela hierarquia;
+- ida do sinal `test` ate o `datapath` e seu retorno invertido;
 - execucao self-checking;
 - geracao de FSDB;
 - abertura da waveform no Verdi.
@@ -76,14 +85,14 @@ cd ~/tcc/RUN
 
 ## 4. Conferir codificacao e filelist
 
-O VCS usado no ambiente apresentou erro com BOM/UTF-8 nos fontes.
-Os arquivos deste pacote foram gravados em ASCII.
+O VCS usado no ambiente apresentou erro com BOM nos fontes. Os arquivos deste
+pacote foram gravados sem BOM; o comentario solicitado no `datapath` usa UTF-8.
 
 Confira:
 
 ```bash
-file ../RTL/simple_adder.sv
-file ../tb/_tb_simple_adder.sv
+file ../RTL/*.sv
+file ../tb/_tb_riscv_system_top.sv
 file filelist.f
 cat -A filelist.f
 ```
@@ -91,8 +100,14 @@ cat -A filelist.f
 O `filelist.f` deve aparecer assim:
 
 ```text
-../tb/_tb_simple_adder.sv$
-../RTL/simple_adder.sv$
+../tb/_tb_riscv_system_top.sv$
+../RTL/riscv_system_top.sv$
+../RTL/riscv_core.sv$
+../RTL/datapath.sv$
+../RTL/control_unit.sv$
+../RTL/hazard_unit.sv$
+../RTL/instruction_memory.sv$
+../RTL/data_memory.sv$
 ```
 
 O testbench fica primeiro, seguindo o procedimento que funcionou no ambiente.
@@ -128,8 +143,8 @@ Nao execute `./simv` se houver erro de compilacao.
 Resultado funcional esperado:
 
 ```text
-PASS: 10 + 5 = 15
-PASS: 200 + 100 = 300
+PASS: clock and reset reached the module hierarchy
+PASS: test passed through the datapath and returned inverted
 ```
 
 Depois confirme a waveform:
@@ -165,16 +180,7 @@ vcs -full64 -sverilog -f filelist.f \
 verdi -dbdir simv.daidir -ssf test.fsdb &
 ```
 
-## 10. Depois que este smoke test passar
+## 10. Proximas etapas
 
-Este teste nao e parte da arquitetura final do RV32I. Ele existe para provar que o ambiente funciona.
-
-Somente depois disso vale substituir gradualmente o `simple_adder` por blocos reais, com testes unitarios separados, comecando por blocos simples como:
-
-1. ALU;
-2. register file;
-3. memoria simples;
-4. PC / PC+4;
-5. registradores de pipeline.
-
-Nao introduzir forwarding, stall ou flush antes de o datapath basico estar funcional.
+Os modulos ainda nao possuem logica do processador. A implementacao do RV32I
+pipeline de cinco estagios sera feita gradualmente em etapas futuras.

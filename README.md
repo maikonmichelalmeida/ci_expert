@@ -1,9 +1,11 @@
-# CI Expert - smoke test inicial
+# Esqueleto RISC-V RV32I
 
-Pacote de teste minimo para validar o fluxo do projeto no servidor UFRGS com Synopsys VCS e Verdi.
+Estrutura inicial de um futuro processador RISC-V RV32I com pipeline de cinco
+estagios. Nesta etapa, os modulos sao apenas esqueletos: nao ha circuitos nem
+logica de processador implementados.
 
-O projeto principal continua sendo o desenvolvimento de um nucleo RISC-V RV32I pipelined.
+O `clock` e o `reset` percorrem toda a hierarquia. Um sinal `test` sai do
+testbench, chega ao `datapath`, e retorna invertido para validar a conectividade.
 
-Para executar o teste, consulte:
-
-`RUN/PROCEDIMENTO_TESTE.md`
+Para compilar e executar no servidor UFRGS com VCS e Verdi, consulte
+`RUN/PROCEDIMENTO_TESTE.md`.
