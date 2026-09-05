@@ -124,6 +124,17 @@ module tb_riscv_system_top;
         end
     endtask
 
+    task automatic check_system_pc (
+        input logic [31:0] expected
+    );
+        begin
+            if (dut.PCF !== expected) begin
+                $fatal(1, "FAIL system PC: PCF=%h expected=%h", dut.PCF, expected);
+            end
+            $display("PASS: system PCF=%h", dut.PCF);
+        end
+    endtask
+
     initial begin
         $display("=== RV32I ALU TEST THROUGH SYSTEM TOP ===");
 
@@ -139,6 +150,18 @@ module tb_riscv_system_top;
         #10;
         reset = 1'b0;
         #1;
+
+        $display("=== RV32I PC TEST THROUGH SYSTEM TOP ===");
+        check_system_pc(32'h0000_0000);
+        @(posedge clk);
+        #1;
+        check_system_pc(32'h0000_0004);
+        @(posedge clk);
+        #1;
+        check_system_pc(32'h0000_0008);
+        @(posedge clk);
+        #1;
+        check_system_pc(32'h0000_000c);
 
         // Uma verificacao para cada codigo de operacao.
         check_alu(4'b0000, 32'd5,         32'd7,         32'd12,        1'b0, 1'b0, 1'b0, 1'b0, "ADD");

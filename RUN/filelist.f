@@ -2,6 +2,7 @@
 ../RTL/riscv_system_top.sv
 ../RTL/riscv_core.sv
 ../RTL/datapath.sv
+../RTL/pc.sv
 ../RTL/alu.sv
 ../RTL/register_file.sv
 ../RTL/control_unit.sv

@@ -20,12 +20,13 @@ module riscv_system_top (
 
     logic [31:0] instruction_rdata;
     logic [31:0] data_rdata;
+    logic [31:0] PCF;
 
-    // As memorias ficam desabilitadas ate o core possuir PC e LSU.
+    // A IMEM recebe o endereco do PC, mantendo sua leitura sincrona de um ciclo.
     instruction_memory u_instruction_memory (
         .clk   (clk),
-        .en    (1'b0),
-        .addr  (32'b0),
+        .en    (1'b1),
+        .addr  (PCF),
         .rdata (instruction_rdata)
     );
 
@@ -46,7 +47,8 @@ module riscv_system_top (
         .rd_data      (rd_data),
         .rd_we        (rd_we),
         .rs1_data     (rs1_data),
-        .rs2_data     (rs2_data)
+        .rs2_data     (rs2_data),
+        .PCF          (PCF)
     );
 
     data_memory u_data_memory (

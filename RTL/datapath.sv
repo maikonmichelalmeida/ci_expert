@@ -15,8 +15,31 @@ module datapath (
     input  logic [31:0] rd_data,
     input  logic        rd_we,
     output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data
+    output logic [31:0] rs2_data,
+    output logic [31:0] PCF
 );
+
+    logic        PCSrcE;
+    logic [31:0] PCTargetE;
+    logic        StallF;
+    logic [31:0] PCPlus4F;
+    logic [31:0] PCNextF;
+
+    // Estes sinais serao ligados ao controle de branch e hazards em etapas futuras.
+    assign PCSrcE    = 1'b0;
+    assign PCTargetE = 32'b0;
+    assign StallF    = 1'b0;
+
+    pc u_pc (
+        .clk       (clk),
+        .reset     (reset),
+        .PCSrcE    (PCSrcE),
+        .PCTargetE (PCTargetE),
+        .StallF    (StallF),
+        .PCF       (PCF),
+        .PCPlus4F  (PCPlus4F),
+        .PCNextF   (PCNextF)
+    );
 
     // Nesta etapa, os sinais da ULA apenas atravessam o datapath.
     alu u_alu (

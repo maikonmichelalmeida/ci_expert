@@ -15,7 +15,8 @@ module riscv_core (
     input  logic [31:0] rd_data,
     input  logic        rd_we,
     output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data
+    output logic [31:0] rs2_data,
+    output logic [31:0] PCF
 );
 
     datapath u_datapath (
@@ -35,7 +36,8 @@ module riscv_core (
         .rd_data      (rd_data),
         .rd_we        (rd_we),
         .rs1_data     (rs1_data),
-        .rs2_data     (rs2_data)
+        .rs2_data     (rs2_data),
+        .PCF          (PCF)
     );
 
     control_unit u_control_unit (

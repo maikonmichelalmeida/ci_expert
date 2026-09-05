@@ -19,3 +19,6 @@ work/
 # Local helper scripts - nao versionar
 send.ps1
 send.bat
+
+# Diagramas locais usados como referencia
+diagramas/
