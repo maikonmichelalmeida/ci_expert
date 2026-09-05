@@ -1,3 +1,5 @@
+// Nucleo do processador: agrupa datapath, control_unit e hazard_unit.
+// As memorias ficam fora deste modulo, conforme a hierarquia do diagrama.
 module riscv_core (
     input  logic clk,
     input  logic reset,
@@ -24,11 +26,15 @@ module riscv_core (
     output logic [31:0] PCPlus4D
 );
 
+    // Estes fios levam as decisoes da hazard_unit ao registrador IF/ID.
+    // Hoje ambos ficam em zero; os nomes ja reservam a conexao definitiva.
     logic StallD;
     logic FlushD;
 
     // A instrucao vem da IMEM externa ao core. Os sinais da hazard unit entram
     // no datapath para controlar diretamente o registrador de pipeline IF/ID.
+    // Os sinais terminados em F pertencem ao Fetch; os terminados em D saem
+    // registrados para o futuro estagio Decode.
     datapath u_datapath (
         .clk          (clk),
         .reset        (reset),
@@ -57,11 +63,14 @@ module riscv_core (
         .PCPlus4D     (PCPlus4D)
     );
 
+    // A control_unit permanece posicionada na hierarquia, embora o decoder
+    // ainda seja um esqueleto nesta etapa incremental.
     control_unit u_control_unit (
         .clk   (clk),
         .reset (reset)
     );
 
+    // A hazard_unit sera a origem real dos stalls e flushes do pipeline.
     hazard_unit u_hazard_unit (
         .clk    (clk),
         .reset  (reset),
