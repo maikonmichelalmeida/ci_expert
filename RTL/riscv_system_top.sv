@@ -1,4 +1,6 @@
-module riscv_system_top (
+module riscv_system_top #(
+    parameter IMEM_INIT_FILE = ""
+)(
     input  logic clk,
     input  logic reset,
     input  logic [31:0] alu_a,
@@ -18,16 +20,23 @@ module riscv_system_top (
     output logic [31:0] rs2_data
 );
 
-    logic [31:0] instruction_rdata;
     logic [31:0] data_rdata;
     logic [31:0] PCF;
+    logic [31:0] PCPlus4F;
+    logic [31:0] InstrF;
+    logic [31:0] PCD;
+    logic [31:0] PCPlus4D;
+    logic [31:0] InstrD;
 
-    // A IMEM recebe o endereco do PC, mantendo sua leitura sincrona de um ciclo.
-    instruction_memory u_instruction_memory (
+    // A IMEM permanece fora do core. Sua saida combinacional forma InstrF,
+    // que entra no datapath e sera registrada no IF/ID no proximo clock.
+    instruction_memory #(
+        .INIT_FILE (IMEM_INIT_FILE)
+    ) u_instruction_memory (
         .clk   (clk),
         .en    (1'b1),
         .addr  (PCF),
-        .rdata (instruction_rdata)
+        .rdata (InstrF)
     );
 
     riscv_core u_riscv_core (
@@ -48,7 +57,12 @@ module riscv_system_top (
         .rd_we        (rd_we),
         .rs1_data     (rs1_data),
         .rs2_data     (rs2_data),
-        .PCF          (PCF)
+        .InstrF       (InstrF),
+        .PCF          (PCF),
+        .PCPlus4F     (PCPlus4F),
+        .InstrD       (InstrD),
+        .PCD          (PCD),
+        .PCPlus4D     (PCPlus4D)
     );
 
     data_memory u_data_memory (

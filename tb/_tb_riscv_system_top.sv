@@ -21,7 +21,9 @@ module tb_riscv_system_top;
     logic [31:0] rs2_data;
     integer      i;
 
-    riscv_system_top dut (
+    riscv_system_top #(
+        .IMEM_INIT_FILE ("../mem/program.hex")
+    ) dut (
         .clk          (clk),
         .reset        (reset),
         .alu_a        (alu_a),
@@ -46,11 +48,13 @@ module tb_riscv_system_top;
         forever #5 clk = ~clk;
     end
 
+`ifndef VERILATOR
     initial begin
         $fsdbDumpfile("test.fsdb");
         $fsdbDumpvars(0, tb_riscv_system_top);
         $fsdbDumpMDA(0, tb_riscv_system_top);
     end
+`endif
 
     // Todos os testes acessam a ULA pelas portas do topo do sistema.
     task automatic check_alu (
@@ -124,14 +128,26 @@ module tb_riscv_system_top;
         end
     endtask
 
-    task automatic check_system_pc (
-        input logic [31:0] expected
+    task automatic check_fetch (
+        input logic [31:0] expected_pcf,
+        input logic [31:0] expected_instrf,
+        input logic [31:0] expected_instrd,
+        input logic [31:0] expected_pcd,
+        input logic [31:0] expected_pcplus4d
     );
         begin
-            if (dut.PCF !== expected) begin
-                $fatal(1, "FAIL system PC: PCF=%h expected=%h", dut.PCF, expected);
+            if ((dut.PCF      !== expected_pcf)      ||
+                (dut.PCPlus4F !== (expected_pcf + 32'd4)) ||
+                (dut.InstrF   !== expected_instrf)   ||
+                (dut.InstrD   !== expected_instrd)   ||
+                (dut.PCD      !== expected_pcd)      ||
+                (dut.PCPlus4D !== expected_pcplus4d)) begin
+                $fatal(1,
+                    "FAIL Fetch: PCF=%h InstrF=%h InstrD=%h PCD=%h PCPlus4D=%h",
+                    dut.PCF, dut.InstrF, dut.InstrD, dut.PCD, dut.PCPlus4D);
             end
-            $display("PASS: system PCF=%h", dut.PCF);
+            $display("PASS Fetch: PCF=%h InstrF=%h InstrD=%h PCD=%h PCPlus4D=%h",
+                     dut.PCF, dut.InstrF, dut.InstrD, dut.PCD, dut.PCPlus4D);
         end
     endtask
 
@@ -151,17 +167,24 @@ module tb_riscv_system_top;
         reset = 1'b0;
         #1;
 
-        $display("=== RV32I PC TEST THROUGH SYSTEM TOP ===");
-        check_system_pc(32'h0000_0000);
+        $display("=== RV32I FETCH TEST THROUGH SYSTEM TOP ===");
+
+        // Antes do primeiro avanco, InstrF ja enxerga PCF=0 de forma
+        // combinacional, enquanto o registrador IF/ID continua limpo.
+        check_fetch(32'h0000_0000, 32'h0010_0093, 32'b0,
+                    32'b0, 32'b0);
         @(posedge clk);
         #1;
-        check_system_pc(32'h0000_0004);
+        check_fetch(32'h0000_0004, 32'h0020_0113, 32'h0010_0093,
+                    32'h0000_0000, 32'h0000_0004);
         @(posedge clk);
         #1;
-        check_system_pc(32'h0000_0008);
+        check_fetch(32'h0000_0008, 32'h0020_81b3, 32'h0020_0113,
+                    32'h0000_0004, 32'h0000_0008);
         @(posedge clk);
         #1;
-        check_system_pc(32'h0000_000c);
+        check_fetch(32'h0000_000c, 32'h0000_0013, 32'h0020_81b3,
+                    32'h0000_0008, 32'h0000_000c);
 
         // Uma verificacao para cada codigo de operacao.
         check_alu(4'b0000, 32'd5,         32'd7,         32'd12,        1'b0, 1'b0, 1'b0, 1'b0, "ADD");

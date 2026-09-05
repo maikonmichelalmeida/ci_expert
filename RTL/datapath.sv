@@ -16,13 +16,19 @@ module datapath (
     input  logic        rd_we,
     output logic [31:0] rs1_data,
     output logic [31:0] rs2_data,
-    output logic [31:0] PCF
+    input  logic [31:0] InstrF,
+    input  logic        StallD,
+    input  logic        FlushD,
+    output logic [31:0] PCF,
+    output logic [31:0] PCPlus4F,
+    output logic [31:0] InstrD,
+    output logic [31:0] PCD,
+    output logic [31:0] PCPlus4D
 );
 
     logic        PCSrcE;
     logic [31:0] PCTargetE;
     logic        StallF;
-    logic [31:0] PCPlus4F;
     logic [31:0] PCNextF;
 
     // Estes sinais serao ligados ao controle de branch e hazards em etapas futuras.
@@ -40,6 +46,23 @@ module datapath (
         .PCPlus4F  (PCPlus4F),
         .PCNextF   (PCNextF)
     );
+
+    // Registrador de pipeline IF/ID.
+    // InstrD guarda a instrucao buscada, enquanto PCD e PCPlus4D guardam os
+    // enderecos que pertencem a essa mesma instrucao no estagio Decode.
+    always_ff @(posedge clk) begin
+        // Flush possui prioridade sobre Stall para remover uma instrucao invalida.
+        if (reset || FlushD) begin
+            InstrD   <= 32'b0;
+            PCD      <= 32'b0;
+            PCPlus4D <= 32'b0;
+        end else if (!StallD) begin
+            InstrD   <= InstrF;
+            PCD      <= PCF;
+            PCPlus4D <= PCPlus4F;
+        end
+        // Com StallD ativo nao ha atribuicao: o IF/ID conserva seus valores.
+    end
 
     // Nesta etapa, os sinais da ULA apenas atravessam o datapath.
     alu u_alu (

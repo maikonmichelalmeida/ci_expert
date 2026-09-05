@@ -23,12 +23,10 @@ module instruction_memory #(
         end
     end
 
-    // A leitura e sincronizada: o dado aparece depois do flanco de subida.
-    always_ff @(posedge clk) begin
-        if (en) begin
-            rdata <= mem[word_index];
-        end
-    end
+    // Cada instrucao RV32I ocupa quatro bytes. Por isso, os dois bits menos
+    // significativos nao participam do indice usado para acessar a memoria.
+    // A leitura e combinacional para que InstrF acompanhe diretamente o PCF.
+    assign rdata = en ? mem[word_index] : 32'b0;
 
 `ifndef SYNTHESIS
     initial begin

@@ -40,9 +40,7 @@ module tb_memories;
 
     task automatic check_imem (
         input logic [31:0] address,
-        input logic [31:0] expected,
-        input logic [31:0] previous,
-        input logic        check_previous
+        input logic [31:0] expected
     );
         begin
             @(negedge clk);
@@ -50,14 +48,7 @@ module tb_memories;
             imem_addr = address;
             #1;
 
-            // Antes do proximo clock, a saida ainda deve guardar a leitura anterior.
-            if (check_previous && (imem_rdata !== previous)) begin
-                $fatal(1, "FAIL IMEM latency: rdata=%h expected_previous=%h",
-                       imem_rdata, previous);
-            end
-
-            @(posedge clk);
-            #1;
+            // A IMEM de Fetch responde ao endereco sem esperar um clock.
             if (imem_rdata !== expected) begin
                 $fatal(1, "FAIL IMEM address=%h rdata=%h expected=%h",
                        address, imem_rdata, expected);
@@ -126,19 +117,19 @@ module tb_memories;
         dmem_wstrb = 4'b0000;
 
         $display("=== INSTRUCTION MEMORY TEST ===");
-        check_imem(32'h0000_0000, 32'h0010_0093, 32'b0,         1'b0);
-        check_imem(32'h0000_0004, 32'h0020_0113, 32'h0010_0093, 1'b1);
-        check_imem(32'h0000_0008, 32'h0020_81b3, 32'h0020_0113, 1'b1);
+        check_imem(32'h0000_0000, 32'h0010_0093);
+        check_imem(32'h0000_0004, 32'h0020_0113);
+        check_imem(32'h0000_0008, 32'h0020_81b3);
+        check_imem(32'h0000_000c, 32'h0000_0013);
 
         @(negedge clk);
         imem_en   = 1'b0;
         imem_addr = 32'h0000_0000;
-        @(posedge clk);
         #1;
-        if (imem_rdata !== 32'h0020_81b3) begin
-            $fatal(1, "FAIL IMEM enable: rdata changed while en=0");
+        if (imem_rdata !== 32'b0) begin
+            $fatal(1, "FAIL IMEM enable: rdata=%h expected=00000000", imem_rdata);
         end
-        $display("PASS IMEM: en=0 keeps the previous output");
+        $display("PASS IMEM: en=0 drives zero on the output");
 
         $display("=== DATA MEMORY TEST ===");
 
