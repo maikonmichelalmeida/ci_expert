@@ -12,6 +12,14 @@ module tb_riscv_system_top;
     logic        alu_negative;
     logic        alu_carry;
     logic        alu_overflow;
+    logic [4:0]  rs1_addr;
+    logic [4:0]  rs2_addr;
+    logic [4:0]  rd_addr;
+    logic [31:0] rd_data;
+    logic        rd_we;
+    logic [31:0] rs1_data;
+    logic [31:0] rs2_data;
+    integer      i;
 
     riscv_system_top dut (
         .clk          (clk),
@@ -23,7 +31,14 @@ module tb_riscv_system_top;
         .alu_zero     (alu_zero),
         .alu_negative (alu_negative),
         .alu_carry    (alu_carry),
-        .alu_overflow (alu_overflow)
+        .alu_overflow (alu_overflow),
+        .rs1_addr     (rs1_addr),
+        .rs2_addr     (rs2_addr),
+        .rd_addr      (rd_addr),
+        .rd_data      (rd_data),
+        .rd_we        (rd_we),
+        .rs1_data     (rs1_data),
+        .rs2_data     (rs2_data)
     );
 
     initial begin
@@ -70,6 +85,45 @@ module tb_riscv_system_top;
         end
     endtask
 
+    task automatic write_register (
+        input logic [4:0]  address,
+        input logic [31:0] data
+    );
+        begin
+            @(negedge clk);
+            rd_addr = address;
+            rd_data = data;
+            rd_we   = 1'b1;
+
+            @(posedge clk);
+            #1;
+            rd_we = 1'b0;
+        end
+    endtask
+
+    task automatic check_registers (
+        input logic [4:0]  address_1,
+        input logic [31:0] expected_1,
+        input logic [4:0]  address_2,
+        input logic [31:0] expected_2,
+        input string       test_name
+    );
+        begin
+            rs1_addr = address_1;
+            rs2_addr = address_2;
+            #1;
+
+            if ((rs1_data !== expected_1) || (rs2_data !== expected_2)) begin
+                $fatal(1,
+                    "FAIL %s: rs1=x%0d data=%h expected=%h rs2=x%0d data=%h expected=%h",
+                    test_name, address_1, rs1_data, expected_1,
+                    address_2, rs2_data, expected_2);
+            end
+
+            $display("PASS: %s", test_name);
+        end
+    endtask
+
     initial begin
         $display("=== RV32I ALU TEST THROUGH SYSTEM TOP ===");
 
@@ -77,6 +131,11 @@ module tb_riscv_system_top;
         alu_a  = 32'b0;
         alu_b  = 32'b0;
         alu_op = 4'b1111;
+        rs1_addr = 5'b0;
+        rs2_addr = 5'b0;
+        rd_addr  = 5'b0;
+        rd_data  = 32'b0;
+        rd_we    = 1'b0;
         #10;
         reset = 1'b0;
         #1;
@@ -110,6 +169,41 @@ module tb_riscv_system_top;
         check_alu(4'b1101, 32'h8000_0000, 32'b0,         32'h7fff_ffff, 1'b0, 1'b0, 1'b1, 1'b1, "DEC overflow");
 
         $display("PASS: all operations and flags were checked through the top");
+
+        $display("=== RV32I REGISTER FILE TEST THROUGH SYSTEM TOP ===");
+
+        // x0 deve retornar zero antes e depois de uma tentativa de escrita.
+        check_registers(5'd0, 32'b0, 5'd0, 32'b0, "x0 initial value");
+        write_register(5'd0, 32'hffff_ffff);
+        check_registers(5'd0, 32'b0, 5'd0, 32'b0, "x0 write protection");
+
+        // Escreve um valor diferente em cada registrador de x1 ate x31.
+        for (i = 1; i < 32; i = i + 1) begin
+            write_register(i, 32'h1000_0000 + i);
+        end
+
+        // Le os 31 registradores pelas duas portas ao mesmo tempo.
+        for (i = 1; i < 32; i = i + 1) begin
+            check_registers(
+                i,
+                32'h1000_0000 + i,
+                32 - i,
+                32'h1000_0000 + (32 - i),
+                "dual read"
+            );
+        end
+
+        // Com rd_we em zero, o valor armazenado nao pode mudar.
+        @(negedge clk);
+        rd_addr = 5'd5;
+        rd_data = 32'hdead_beef;
+        rd_we   = 1'b0;
+        @(posedge clk);
+        #1;
+        check_registers(5'd5, 32'h1000_0005, 5'd31, 32'h1000_001f,
+                        "write enable disabled");
+
+        $display("PASS: register file ports, writes and x0 were checked through the top");
         $display("=== TEST FINISHED ===");
         $finish;
     end
