@@ -146,6 +146,9 @@ module tb_memories;
         write_dmem(1'b1, 32'h0000_0000, 32'h1122_3344, 4'b1111);
         check_dmem(32'h0000_0000, 32'h1122_3344, 32'b0, 1'b0);
 
+        // A DMEM aceita os bits baixos do endereco; a futura LSU cuidara do alinhamento.
+        check_dmem(32'h0000_0001, 32'h1122_3344, 32'h1122_3344, 1'b1);
+
         // Somente o byte 1 deve mudar.
         write_dmem(1'b1, 32'h0000_0000, 32'h0000_aa00, 4'b0010);
         check_dmem(32'h0000_0000, 32'h1122_aa44, 32'b0, 1'b0);

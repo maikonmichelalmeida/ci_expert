@@ -47,7 +47,7 @@ module data_memory #(
     end
 
     always @(posedge clk) begin
-        if (en && ((addr[1:0] != 2'b00) || ((addr >> 2) >= DEPTH))) begin
+        if (en && ((addr >> 2) >= DEPTH)) begin
             $error("Invalid data memory address: %h", addr);
         end
     end
