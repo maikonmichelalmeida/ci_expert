@@ -5,10 +5,12 @@
 // nulos sem transformar a control_unit em um decoder funcional antes da hora.
 module tb_decode_id_ex;
 
-    localparam logic [1:0] IMM_I = 2'b00;
-    localparam logic [1:0] IMM_S = 2'b01;
-    localparam logic [1:0] IMM_B = 2'b10;
-    localparam logic [1:0] IMM_J = 2'b11;
+    localparam logic [2:0] IMM_I        = 3'b000;
+    localparam logic [2:0] IMM_S        = 3'b001;
+    localparam logic [2:0] IMM_B        = 3'b010;
+    localparam logic [2:0] IMM_J        = 3'b011;
+    localparam logic [2:0] IMM_U        = 3'b100;
+    localparam logic [2:0] IMM_RESERVED = 3'b101;
 
     logic clk;
     logic reset;
@@ -21,7 +23,7 @@ module tb_decode_id_ex;
     logic       BranchD;
     logic [2:0] ALUControlD;
     logic       ALUSrcD;
-    logic [1:0] ImmSrcD;
+    logic [2:0] ImmSrcD;
 
     logic       StallF;
     logic       StallD;
@@ -148,7 +150,7 @@ module tb_decode_id_ex;
 
     task automatic check_immediate (
         input logic [31:0] instruction,
-        input logic [1:0]  immediate_source,
+        input logic [2:0]  immediate_source,
         input logic [31:0] expected,
         input string       test_name
     );
@@ -242,6 +244,9 @@ module tb_decode_id_ex;
         check_immediate(32'hfe20_ae23, IMM_S, 32'hffff_fffc, "S format -4");
         check_immediate(32'h0000_0463, IMM_B, 32'h0000_0008, "B format +8");
         check_immediate(32'h0100_006f, IMM_J, 32'h0000_0010, "J format +16");
+        check_immediate(32'h1234_50b7, IMM_U, 32'h1234_5000, "U format");
+        check_immediate(32'hffff_ffff, IMM_RESERVED, 32'h0000_0000,
+                        "reserved ImmSrcD");
 
         // Coloca ADD x3,x1,x2 no Decode e aplica um padrao nao nulo em cada
         // controle. A control_unit real continua neutra; este estimulo existe

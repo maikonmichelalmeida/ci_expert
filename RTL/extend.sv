@@ -3,18 +3,25 @@
 // qual formato deve ser escolhido por meio de ImmSrcD.
 module extend (
     input  logic [31:7] InstrD,
-    input  logic [1:0]  ImmSrcD,
+    input  logic [2:0]  ImmSrcD,
     output logic [31:0] ImmExtD
 );
 
-    // Codificacao de ImmSrcD usada no diagrama do datapath.
-    // Como sao 2 bits, existem quatro escolhas: I, S, B e J.
-    localparam logic [1:0] IMM_I = 2'b00;
-    localparam logic [1:0] IMM_S = 2'b01;
-    localparam logic [1:0] IMM_B = 2'b10;
-    localparam logic [1:0] IMM_J = 2'b11;
+    // Codificacao explicita de ImmSrcD. Os 3 bits acomodam os cinco formatos
+    // usados pelo RV32I e deixam 101, 110 e 111 reservados para uso futuro.
+    localparam logic [2:0] IMM_I = 3'b000;
+    localparam logic [2:0] IMM_S = 3'b001;
+    localparam logic [2:0] IMM_B = 3'b010;
+    localparam logic [2:0] IMM_J = 3'b011;
+    localparam logic [2:0] IMM_U = 3'b100;
 
     always_comb begin
+        // O valor inicial garante uma saida segura e evita latch mesmo se
+        // ImmSrcD receber uma codificacao reservada ou desconhecida.
+        ImmExtD = 32'b0;
+
+        // Nao usamos unique porque os codigos reservados sao entradas validas
+        // para cair no default durante verificacoes estruturais.
         case (ImmSrcD)
             // Formato I: o imediato ocupa InstrD[31:20]. Repetir o bit 31
             // vinte vezes faz a extensao de sinal de 12 para 32 bits.
@@ -36,8 +43,12 @@ module extend (
             IMM_J: ImmExtD = {{11{InstrD[31]}}, InstrD[31], InstrD[19:12],
                               InstrD[20], InstrD[30:21], 1'b0};
 
-            // Todos os valores de 2 bits ja aparecem acima. O default deixa
-            // a saida conhecida mesmo diante de X durante uma simulacao.
+            // Formato U: os 20 bits superiores da instrucao permanecem nas
+            // mesmas posicoes e os 12 bits inferiores recebem zero.
+            // Exemplo: InstrD[31:12] = 20'h12345 produz 32'h1234_5000.
+            IMM_U: ImmExtD = {InstrD[31:12], 12'b0};
+
+            // Codificacoes reservadas e valores desconhecidos produzem zero.
             default: ImmExtD = 32'b0;
         endcase
     end

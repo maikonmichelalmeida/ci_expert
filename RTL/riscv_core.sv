@@ -55,7 +55,7 @@ module riscv_core (
     logic       BranchD;
     logic [2:0] ALUControlD;
     logic       ALUSrcD;
-    logic [1:0] ImmSrcD;
+    logic [2:0] ImmSrcD;
 
     // Saidas estruturais da hazard_unit. StallF chega ao PC, StallD e FlushD
     // chegam ao IF/ID, e FlushE chega ao ID/EX. As selecoes de forwarding ja

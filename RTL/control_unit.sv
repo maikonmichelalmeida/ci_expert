@@ -14,7 +14,7 @@ module control_unit (
     output logic       BranchD,
     output logic [2:0] ALUControlD,
     output logic       ALUSrcD,
-    output logic [1:0] ImmSrcD
+    output logic [2:0] ImmSrcD
 );
 
     // A interface definitiva ja recebe os campos de InstrD, mas eles ainda nao
@@ -27,7 +27,7 @@ module control_unit (
     assign BranchD     = 1'b0;
     assign ALUControlD = 3'b000;
     assign ALUSrcD     = 1'b0;
-    assign ImmSrcD     = 2'b00;
+    assign ImmSrcD     = 3'b000;
 
     // clk e reset permanecem na interface estrutural do modulo. Nenhum estado
     // interno e criado nesta etapa, pois o decoder funcional vira depois.

@@ -63,7 +63,7 @@ module tb_fetch;
         .BranchD      (1'b0),
         .ALUControlD  (3'b000),
         .ALUSrcD      (1'b0),
-        .ImmSrcD      (2'b00),
+        .ImmSrcD      (3'b000),
         .StallF       (StallF),
         .StallD       (StallD),
         .FlushD       (FlushD),

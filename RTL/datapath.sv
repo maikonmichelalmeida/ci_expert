@@ -22,7 +22,7 @@ module datapath (
     input  logic        BranchD,
     input  logic [2:0]  ALUControlD,
     input  logic        ALUSrcD,
-    input  logic [1:0]  ImmSrcD,
+    input  logic [2:0]  ImmSrcD,
     input  logic        StallF,
     input  logic        StallD,
     input  logic        FlushD,

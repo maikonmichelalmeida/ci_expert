@@ -152,7 +152,7 @@ module tb_riscv_system_top;
                 (dut.u_riscv_core.BranchD     !== 1'b0)  ||
                 (dut.u_riscv_core.ALUControlD !== 3'b000)||
                 (dut.u_riscv_core.ALUSrcD     !== 1'b0)  ||
-                (dut.u_riscv_core.ImmSrcD     !== 2'b00)) begin
+                (dut.u_riscv_core.ImmSrcD     !== 3'b000)) begin
                 $fatal(1, "FAIL: control_unit outputs are not neutral");
             end
 
