@@ -11,13 +11,9 @@ module datapath (
     output logic        alu_negative,
     output logic        alu_carry,
     output logic        alu_overflow,
-    input  logic [4:0]  rs1_addr,
-    input  logic [4:0]  rs2_addr,
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
     input  logic        rd_we,
-    output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data,
     input  logic [31:0] InstrF,
     input  logic        StallD,
     input  logic        FlushD,
@@ -25,7 +21,15 @@ module datapath (
     output logic [31:0] PCPlus4F,
     output logic [31:0] InstrD,
     output logic [31:0] PCD,
-    output logic [31:0] PCPlus4D
+    output logic [31:0] PCPlus4D,
+    output logic [6:0]  OpD,
+    output logic [4:0]  RdD,
+    output logic [2:0]  Funct3D,
+    output logic [4:0]  Rs1D,
+    output logic [4:0]  Rs2D,
+    output logic        Funct7b5D,
+    output logic [31:0] RD1D,
+    output logic [31:0] RD2D
 );
 
     // Sinais ao redor do PC no diagrama: PCSrcE controla o mux, PCTargetE sera
@@ -76,6 +80,20 @@ module datapath (
         // Com StallD ativo nao ha atribuicao: o IF/ID conserva seus valores.
     end
 
+    // O Decode estrutural apenas separa os campos que ocupam posicoes fixas
+    // em InstrD. Nenhum opcode ou funct e interpretado nesta etapa.
+    assign OpD       = InstrD[6:0];
+    assign RdD       = InstrD[11:7];
+    assign Funct3D   = InstrD[14:12];
+    assign Rs1D      = InstrD[19:15];
+    assign Rs2D      = InstrD[24:20];
+    assign Funct7b5D = InstrD[30];
+
+    // Rs1D, Rs2D e RdD sao somente recortes dos bits da instrucao. Em formatos
+    // que nao usam algum desses campos, os bits ainda sao extraidos, mas a
+    // futura control_unit devera ignora-los. Em ADDI, por exemplo, InstrD[24:20]
+    // pertence ao imediato mesmo que o fio Rs2D continue mostrando esses bits.
+
     // Nesta etapa, os operandos e o controle da ULA ainda sao portas de teste.
     // A instancia preserva o local definitivo da ALU dentro do datapath.
     alu u_alu (
@@ -89,17 +107,18 @@ module datapath (
         .overflow (alu_overflow)
     );
 
-    // Nesta etapa, as portas do banco de registradores tambem sao de teste.
-    // Futuramente rs1/rs2 virao dos campos de InstrD e rd sera o destino do WB.
+    // A leitura agora vem da instrucao real: Rs1D e Rs2D escolhem os dois
+    // registradores, e seus conteudos aparecem no diagrama como RD1D e RD2D.
+    // A escrita ainda usa o caminho externo temporario ate existir Writeback.
     register_file u_register_file (
         .clk      (clk),
-        .rs1_addr (rs1_addr),
-        .rs2_addr (rs2_addr),
+        .rs1_addr (Rs1D),
+        .rs2_addr (Rs2D),
         .rd_addr  (rd_addr),
         .rd_data  (rd_data),
         .rd_we    (rd_we),
-        .rs1_data (rs1_data),
-        .rs2_data (rs2_data)
+        .rs1_data (RD1D),
+        .rs2_data (RD2D)
     );
 
 endmodule

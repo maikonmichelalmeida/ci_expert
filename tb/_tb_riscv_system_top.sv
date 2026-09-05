@@ -12,14 +12,9 @@ module tb_riscv_system_top;
     logic        alu_negative;
     logic        alu_carry;
     logic        alu_overflow;
-    logic [4:0]  rs1_addr;
-    logic [4:0]  rs2_addr;
     logic [4:0]  rd_addr;
     logic [31:0] rd_data;
     logic        rd_we;
-    logic [31:0] rs1_data;
-    logic [31:0] rs2_data;
-    integer      i;
 
     riscv_system_top #(
         .IMEM_INIT_FILE ("../mem/program.hex")
@@ -34,13 +29,9 @@ module tb_riscv_system_top;
         .alu_negative (alu_negative),
         .alu_carry    (alu_carry),
         .alu_overflow (alu_overflow),
-        .rs1_addr     (rs1_addr),
-        .rs2_addr     (rs2_addr),
         .rd_addr      (rd_addr),
         .rd_data      (rd_data),
-        .rd_we        (rd_we),
-        .rs1_data     (rs1_data),
-        .rs2_data     (rs2_data)
+        .rd_we        (rd_we)
     );
 
     initial begin
@@ -105,26 +96,46 @@ module tb_riscv_system_top;
         end
     endtask
 
-    task automatic check_registers (
-        input logic [4:0]  address_1,
-        input logic [31:0] expected_1,
-        input logic [4:0]  address_2,
-        input logic [31:0] expected_2,
-        input string       test_name
-    );
+    task automatic check_decode_addi;
         begin
-            rs1_addr = address_1;
-            rs2_addr = address_2;
             #1;
-
-            if ((rs1_data !== expected_1) || (rs2_data !== expected_2)) begin
+            if ((dut.OpD     !== 7'b0010011) ||
+                (dut.Rs1D    !== 5'd0)       ||
+                (dut.RdD     !== 5'd1)       ||
+                (dut.Funct3D !== 3'b000)) begin
                 $fatal(1,
-                    "FAIL %s: rs1=x%0d data=%h expected=%h rs2=x%0d data=%h expected=%h",
-                    test_name, address_1, rs1_data, expected_1,
-                    address_2, rs2_data, expected_2);
+                    "FAIL ADDI fields: OpD=%b Rs1D=%0d RdD=%0d Funct3D=%b",
+                    dut.OpD, dut.Rs1D, dut.RdD, dut.Funct3D);
             end
+            if (dut.RD1D !== 32'b0) begin
+                $fatal(1, "FAIL ADDI register read: RD1D=%h expected=00000000",
+                       dut.RD1D);
+            end
+            $display("PASS Decode: ADDI fields and x0 read");
+        end
+    endtask
 
-            $display("PASS: %s", test_name);
+    task automatic check_decode_add;
+        begin
+            #1;
+            if ((dut.OpD       !== 7'b0110011) ||
+                (dut.Rs1D      !== 5'd1)       ||
+                (dut.Rs2D      !== 5'd2)       ||
+                (dut.RdD       !== 5'd3)       ||
+                (dut.Funct3D   !== 3'b000)     ||
+                (dut.Funct7b5D !== 1'b0)) begin
+                $fatal(1,
+                    "FAIL ADD fields: OpD=%b Rs1D=%0d Rs2D=%0d RdD=%0d Funct3D=%b Funct7b5D=%b",
+                    dut.OpD, dut.Rs1D, dut.Rs2D, dut.RdD,
+                    dut.Funct3D, dut.Funct7b5D);
+            end
+            if ((dut.RD1D !== 32'h1111_1111) ||
+                (dut.RD2D !== 32'h2222_2222)) begin
+                $fatal(1,
+                    "FAIL ADD register reads: RD1D=%h RD2D=%h",
+                    dut.RD1D, dut.RD2D);
+            end
+            $display("PASS Decode: ADD fields and x1/x2 reads");
         end
     endtask
 
@@ -152,18 +163,34 @@ module tb_riscv_system_top;
     endtask
 
     initial begin
-        $display("=== RV32I ALU TEST THROUGH SYSTEM TOP ===");
+        $display("=== RV32I SYSTEM TEST THROUGH TOP ===");
 
         reset  = 1'b1;
         alu_a  = 32'b0;
         alu_b  = 32'b0;
         alu_op = 4'b1111;
-        rs1_addr = 5'b0;
-        rs2_addr = 5'b0;
         rd_addr  = 5'b0;
         rd_data  = 32'b0;
         rd_we    = 1'b0;
-        #10;
+
+        $display("=== TEMPORARY REGISTER FILE WRITE TEST ===");
+
+        // O PC e o IF/ID continuam em reset enquanto o caminho temporario de
+        // escrita prepara os valores que a instrucao ADD lera em x1 e x2.
+        write_register(5'd0, 32'hffff_ffff);
+        write_register(5'd1, 32'h1111_1111);
+        write_register(5'd2, 32'h2222_2222);
+
+        // Tenta sobrescrever x1 com rd_we=0. A leitura posterior deve manter
+        // 0x1111_1111, confirmando que o enable de escrita continua funcionando.
+        @(negedge clk);
+        rd_addr = 5'd1;
+        rd_data = 32'hdead_beef;
+        rd_we   = 1'b0;
+        @(posedge clk);
+        #1;
+
+        @(negedge clk);
         reset = 1'b0;
         #1;
 
@@ -177,6 +204,7 @@ module tb_riscv_system_top;
         #1;
         check_fetch(32'h0000_0004, 32'h0020_0113, 32'h0010_0093,
                     32'h0000_0000, 32'h0000_0004);
+        check_decode_addi();
         @(posedge clk);
         #1;
         check_fetch(32'h0000_0008, 32'h0020_81b3, 32'h0020_0113,
@@ -185,6 +213,11 @@ module tb_riscv_system_top;
         #1;
         check_fetch(32'h0000_000c, 32'h0000_0013, 32'h0020_81b3,
                     32'h0000_0008, 32'h0000_000c);
+        check_decode_add();
+
+        $display("PASS: register file writes and instruction-driven reads were checked");
+
+        $display("=== RV32I ALU TEST THROUGH SYSTEM TOP ===");
 
         // Uma verificacao para cada codigo de operacao.
         check_alu(4'b0000, 32'd5,         32'd7,         32'd12,        1'b0, 1'b0, 1'b0, 1'b0, "ADD");
@@ -216,40 +249,6 @@ module tb_riscv_system_top;
 
         $display("PASS: all operations and flags were checked through the top");
 
-        $display("=== RV32I REGISTER FILE TEST THROUGH SYSTEM TOP ===");
-
-        // x0 deve retornar zero antes e depois de uma tentativa de escrita.
-        check_registers(5'd0, 32'b0, 5'd0, 32'b0, "x0 initial value");
-        write_register(5'd0, 32'hffff_ffff);
-        check_registers(5'd0, 32'b0, 5'd0, 32'b0, "x0 write protection");
-
-        // Escreve um valor diferente em cada registrador de x1 ate x31.
-        for (i = 1; i < 32; i = i + 1) begin
-            write_register(i, 32'h1000_0000 + i);
-        end
-
-        // Le os 31 registradores pelas duas portas ao mesmo tempo.
-        for (i = 1; i < 32; i = i + 1) begin
-            check_registers(
-                i,
-                32'h1000_0000 + i,
-                32 - i,
-                32'h1000_0000 + (32 - i),
-                "dual read"
-            );
-        end
-
-        // Com rd_we em zero, o valor armazenado nao pode mudar.
-        @(negedge clk);
-        rd_addr = 5'd5;
-        rd_data = 32'hdead_beef;
-        rd_we   = 1'b0;
-        @(posedge clk);
-        #1;
-        check_registers(5'd5, 32'h1000_0005, 5'd31, 32'h1000_001f,
-                        "write enable disabled");
-
-        $display("PASS: register file ports, writes and x0 were checked through the top");
         $display("=== TEST FINISHED ===");
         $finish;
     end

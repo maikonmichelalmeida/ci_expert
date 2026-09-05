@@ -11,19 +11,23 @@ module riscv_core (
     output logic        alu_negative,
     output logic        alu_carry,
     output logic        alu_overflow,
-    input  logic [4:0]  rs1_addr,
-    input  logic [4:0]  rs2_addr,
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
     input  logic        rd_we,
-    output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data,
     input  logic [31:0] InstrF,
     output logic [31:0] PCF,
     output logic [31:0] PCPlus4F,
     output logic [31:0] InstrD,
     output logic [31:0] PCD,
-    output logic [31:0] PCPlus4D
+    output logic [31:0] PCPlus4D,
+    output logic [6:0]  OpD,
+    output logic [4:0]  RdD,
+    output logic [2:0]  Funct3D,
+    output logic [4:0]  Rs1D,
+    output logic [4:0]  Rs2D,
+    output logic        Funct7b5D,
+    output logic [31:0] RD1D,
+    output logic [31:0] RD2D
 );
 
     // Estes fios levam as decisoes da hazard_unit ao registrador IF/ID.
@@ -46,13 +50,9 @@ module riscv_core (
         .alu_negative (alu_negative),
         .alu_carry    (alu_carry),
         .alu_overflow (alu_overflow),
-        .rs1_addr     (rs1_addr),
-        .rs2_addr     (rs2_addr),
         .rd_addr      (rd_addr),
         .rd_data      (rd_data),
         .rd_we        (rd_we),
-        .rs1_data     (rs1_data),
-        .rs2_data     (rs2_data),
         .InstrF       (InstrF),
         .StallD       (StallD),
         .FlushD       (FlushD),
@@ -60,7 +60,15 @@ module riscv_core (
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
         .PCD          (PCD),
-        .PCPlus4D     (PCPlus4D)
+        .PCPlus4D     (PCPlus4D),
+        .OpD          (OpD),
+        .RdD          (RdD),
+        .Funct3D      (Funct3D),
+        .Rs1D         (Rs1D),
+        .Rs2D         (Rs2D),
+        .Funct7b5D    (Funct7b5D),
+        .RD1D         (RD1D),
+        .RD2D         (RD2D)
     );
 
     // A control_unit permanece posicionada na hierarquia, embora o decoder

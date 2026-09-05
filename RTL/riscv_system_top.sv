@@ -1,5 +1,5 @@
 // Topo do sistema: conecta o core as memorias de instrucao e dados.
-// As portas de ALU e register file ainda sao acessos de teste desta fase.
+// As portas da ALU e a escrita do register file ainda sao acessos de teste.
 module riscv_system_top #(
     parameter IMEM_INIT_FILE = ""
 )(
@@ -13,13 +13,9 @@ module riscv_system_top #(
     output logic        alu_negative,
     output logic        alu_carry,
     output logic        alu_overflow,
-    input  logic [4:0]  rs1_addr,
-    input  logic [4:0]  rs2_addr,
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
-    input  logic        rd_we,
-    output logic [31:0] rs1_data,
-    output logic [31:0] rs2_data
+    input  logic        rd_we
 );
 
     // data_rdata sera consumido pela futura LSU. Hoje a DMEM permanece isolada.
@@ -33,6 +29,17 @@ module riscv_system_top #(
     logic [31:0] PCD;
     logic [31:0] PCPlus4D;
     logic [31:0] InstrD;
+
+    // Campos fixos extraidos de InstrD e dados lidos no Register File.
+    // Eles permanecem visiveis no topo para acompanhar o diagrama e os testes.
+    logic [6:0]  OpD;
+    logic [4:0]  RdD;
+    logic [2:0]  Funct3D;
+    logic [4:0]  Rs1D;
+    logic [4:0]  Rs2D;
+    logic        Funct7b5D;
+    logic [31:0] RD1D;
+    logic [31:0] RD2D;
 
     // A IMEM permanece fora do core. Sua saida combinacional forma InstrF,
     // que entra no datapath e sera registrada no IF/ID no proximo clock.
@@ -48,7 +55,8 @@ module riscv_system_top #(
     );
 
     // O core recebe InstrF da memoria e devolve PCF como endereco da busca.
-    // PCD, PCPlus4D e InstrD ficam prontos para o decoder que sera criado depois.
+    // InstrD alimenta a separacao estrutural dos campos; a interpretacao desses
+    // campos pela control_unit sera implementada somente em uma etapa futura.
     riscv_core u_riscv_core (
         .clk          (clk),
         .reset        (reset),
@@ -60,19 +68,23 @@ module riscv_system_top #(
         .alu_negative (alu_negative),
         .alu_carry    (alu_carry),
         .alu_overflow (alu_overflow),
-        .rs1_addr     (rs1_addr),
-        .rs2_addr     (rs2_addr),
         .rd_addr      (rd_addr),
         .rd_data      (rd_data),
         .rd_we        (rd_we),
-        .rs1_data     (rs1_data),
-        .rs2_data     (rs2_data),
         .InstrF       (InstrF),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
         .PCD          (PCD),
-        .PCPlus4D     (PCPlus4D)
+        .PCPlus4D     (PCPlus4D),
+        .OpD          (OpD),
+        .RdD          (RdD),
+        .Funct3D      (Funct3D),
+        .Rs1D         (Rs1D),
+        .Rs2D         (Rs2D),
+        .Funct7b5D    (Funct7b5D),
+        .RD1D         (RD1D),
+        .RD2D         (RD2D)
     );
 
     // A DMEM ja ocupa seu lugar no sistema, mas fica desabilitada ate a LSU

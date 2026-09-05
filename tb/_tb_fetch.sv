@@ -20,8 +20,14 @@ module tb_fetch;
     logic        alu_negative;
     logic        alu_carry;
     logic        alu_overflow;
-    logic [31:0] rs1_data;
-    logic [31:0] rs2_data;
+    logic [6:0]  OpD;
+    logic [4:0]  RdD;
+    logic [2:0]  Funct3D;
+    logic [4:0]  Rs1D;
+    logic [4:0]  Rs2D;
+    logic        Funct7b5D;
+    logic [31:0] RD1D;
+    logic [31:0] RD2D;
 
     instruction_memory #(
         .MEM_BYTES (2048),
@@ -44,13 +50,9 @@ module tb_fetch;
         .alu_negative (alu_negative),
         .alu_carry    (alu_carry),
         .alu_overflow (alu_overflow),
-        .rs1_addr     (5'b0),
-        .rs2_addr     (5'b0),
         .rd_addr      (5'b0),
         .rd_data      (32'b0),
         .rd_we        (1'b0),
-        .rs1_data     (rs1_data),
-        .rs2_data     (rs2_data),
         .InstrF       (InstrF),
         .StallD       (StallD),
         .FlushD       (FlushD),
@@ -58,7 +60,15 @@ module tb_fetch;
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
         .PCD          (PCD),
-        .PCPlus4D     (PCPlus4D)
+        .PCPlus4D     (PCPlus4D),
+        .OpD          (OpD),
+        .RdD          (RdD),
+        .Funct3D      (Funct3D),
+        .Rs1D         (Rs1D),
+        .Rs2D         (Rs2D),
+        .Funct7b5D    (Funct7b5D),
+        .RD1D         (RD1D),
+        .RD2D         (RD2D)
     );
 
     initial begin
