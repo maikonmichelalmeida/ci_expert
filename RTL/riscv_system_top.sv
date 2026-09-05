@@ -18,9 +18,15 @@ module riscv_system_top (
     output logic [31:0] rs2_data
 );
 
+    logic [31:0] instruction_rdata;
+    logic [31:0] data_rdata;
+
+    // As memorias ficam desabilitadas ate o core possuir PC e LSU.
     instruction_memory u_instruction_memory (
         .clk   (clk),
-        .reset (reset)
+        .en    (1'b0),
+        .addr  (32'b0),
+        .rdata (instruction_rdata)
     );
 
     riscv_core u_riscv_core (
@@ -45,7 +51,11 @@ module riscv_system_top (
 
     data_memory u_data_memory (
         .clk   (clk),
-        .reset (reset)
+        .en    (1'b0),
+        .addr  (32'b0),
+        .wdata (32'b0),
+        .wstrb (4'b0),
+        .rdata (data_rdata)
     );
 
 endmodule
