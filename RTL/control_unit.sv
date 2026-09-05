@@ -12,7 +12,7 @@ module control_unit (
     output logic       MemWriteD,
     output logic       JumpD,
     output logic       BranchD,
-    output logic [2:0] ALUControlD,
+    output logic [3:0] ALUControlD,
     output logic       ALUSrcD,
     output logic [2:0] ImmSrcD
 );
@@ -25,7 +25,7 @@ module control_unit (
     assign MemWriteD   = 1'b0;
     assign JumpD       = 1'b0;
     assign BranchD     = 1'b0;
-    assign ALUControlD = 3'b000;
+    assign ALUControlD = 4'b0000;
     assign ALUSrcD     = 1'b0;
     assign ImmSrcD     = 3'b000;
 

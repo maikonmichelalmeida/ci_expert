@@ -57,7 +57,7 @@ module riscv_system_top #(
     logic        MemWriteE;
     logic        JumpE;
     logic        BranchE;
-    logic [2:0]  ALUControlE;
+    logic [3:0]  ALUControlE;
     logic        ALUSrcE;
 
     // A IMEM permanece fora do core. Sua saida combinacional forma InstrF,

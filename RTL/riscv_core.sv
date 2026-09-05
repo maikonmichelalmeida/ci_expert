@@ -42,7 +42,7 @@ module riscv_core (
     output logic        MemWriteE,
     output logic        JumpE,
     output logic        BranchE,
-    output logic [2:0]  ALUControlE,
+    output logic [3:0]  ALUControlE,
     output logic        ALUSrcE
 );
 
@@ -53,7 +53,7 @@ module riscv_core (
     logic       MemWriteD;
     logic       JumpD;
     logic       BranchD;
-    logic [2:0] ALUControlD;
+    logic [3:0] ALUControlD;
     logic       ALUSrcD;
     logic [2:0] ImmSrcD;
 

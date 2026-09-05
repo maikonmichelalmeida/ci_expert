@@ -21,7 +21,7 @@ module tb_decode_id_ex;
     logic       MemWriteD;
     logic       JumpD;
     logic       BranchD;
-    logic [2:0] ALUControlD;
+    logic [3:0] ALUControlD;
     logic       ALUSrcD;
     logic [2:0] ImmSrcD;
 
@@ -64,7 +64,7 @@ module tb_decode_id_ex;
     logic        MemWriteE;
     logic        JumpE;
     logic        BranchE;
-    logic [2:0]  ALUControlE;
+    logic [3:0]  ALUControlE;
     logic        ALUSrcE;
 
     datapath dut (
@@ -203,7 +203,7 @@ module tb_decode_id_ex;
                 (ImmExtE     !== 32'b0) || (PCPlus4E   !== 32'b0) ||
                 (RegWriteE   !== 1'b0)  || (ResultSrcE !== 2'b00) ||
                 (MemWriteE   !== 1'b0)  || (JumpE      !== 1'b0)  ||
-                (BranchE     !== 1'b0)  || (ALUControlE!== 3'b000)||
+                (BranchE     !== 1'b0)  || (ALUControlE!== 4'b0000)||
                 (ALUSrcE     !== 1'b0)) begin
                 $fatal(1, "FAIL FlushE: ID/EX was not cleared");
             end
@@ -219,7 +219,7 @@ module tb_decode_id_ex;
         MemWriteD   = 1'b0;
         JumpD       = 1'b0;
         BranchD     = 1'b0;
-        ALUControlD = 3'b000;
+        ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
         ImmSrcD     = IMM_I;
         StallF      = 1'b0;
@@ -259,7 +259,7 @@ module tb_decode_id_ex;
         MemWriteD   = 1'b1;
         JumpD       = 1'b1;
         BranchD     = 1'b1;
-        ALUControlD = 3'b101;
+        ALUControlD = 4'b1101;
         ALUSrcD     = 1'b1;
         @(posedge clk);
         #1;

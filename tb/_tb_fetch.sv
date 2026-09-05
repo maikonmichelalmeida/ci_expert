@@ -61,7 +61,7 @@ module tb_fetch;
         .MemWriteD    (1'b0),
         .JumpD        (1'b0),
         .BranchD      (1'b0),
-        .ALUControlD  (3'b000),
+        .ALUControlD  (4'b0000),
         .ALUSrcD      (1'b0),
         .ImmSrcD      (3'b000),
         .StallF       (StallF),
