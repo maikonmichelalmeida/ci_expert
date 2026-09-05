@@ -139,6 +139,35 @@ module tb_riscv_system_top;
         end
     endtask
 
+    task automatic check_structural_control_defaults;
+        begin
+            #1;
+            // Nesta etapa, control_unit e hazard_unit devem apenas manter
+            // valores neutros. O acesso hierarquico verifica as conexoes reais
+            // dentro do core sem transformar esses fios em portas de produto.
+            if ((dut.u_riscv_core.RegWriteD   !== 1'b0)  ||
+                (dut.u_riscv_core.ResultSrcD  !== 2'b00) ||
+                (dut.u_riscv_core.MemWriteD   !== 1'b0)  ||
+                (dut.u_riscv_core.JumpD       !== 1'b0)  ||
+                (dut.u_riscv_core.BranchD     !== 1'b0)  ||
+                (dut.u_riscv_core.ALUControlD !== 3'b000)||
+                (dut.u_riscv_core.ALUSrcD     !== 1'b0)  ||
+                (dut.u_riscv_core.ImmSrcD     !== 2'b00)) begin
+                $fatal(1, "FAIL: control_unit outputs are not neutral");
+            end
+
+            if ((dut.u_riscv_core.StallF    !== 1'b0)  ||
+                (dut.u_riscv_core.StallD    !== 1'b0)  ||
+                (dut.u_riscv_core.FlushD    !== 1'b0)  ||
+                (dut.u_riscv_core.FlushE    !== 1'b0)  ||
+                (dut.u_riscv_core.ForwardAE !== 2'b00) ||
+                (dut.u_riscv_core.ForwardBE !== 2'b00)) begin
+                $fatal(1, "FAIL: hazard_unit outputs are not neutral");
+            end
+            $display("PASS: control_unit and hazard_unit outputs are neutral");
+        end
+    endtask
+
     task automatic check_fetch (
         input logic [31:0] expected_pcf,
         input logic [31:0] expected_instrf,
@@ -193,6 +222,8 @@ module tb_riscv_system_top;
         @(negedge clk);
         reset = 1'b0;
         #1;
+
+        check_structural_control_defaults();
 
         $display("=== RV32I FETCH TEST THROUGH SYSTEM TOP ===");
 

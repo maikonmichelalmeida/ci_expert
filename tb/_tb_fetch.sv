@@ -4,8 +4,10 @@ module tb_fetch;
 
     logic        clk;
     logic        reset;
+    logic        StallF;
     logic        StallD;
     logic        FlushD;
+    logic        FlushE;
     logic [31:0] PCF;
     logic [31:0] PCPlus4F;
     logic [31:0] InstrF;
@@ -54,8 +56,21 @@ module tb_fetch;
         .rd_data      (32'b0),
         .rd_we        (1'b0),
         .InstrF       (InstrF),
+        .RegWriteD    (1'b0),
+        .ResultSrcD   (2'b00),
+        .MemWriteD    (1'b0),
+        .JumpD        (1'b0),
+        .BranchD      (1'b0),
+        .ALUControlD  (3'b000),
+        .ALUSrcD      (1'b0),
+        .ImmSrcD      (2'b00),
+        .StallF       (StallF),
         .StallD       (StallD),
         .FlushD       (FlushD),
+        .FlushE       (FlushE),
+        .ForwardAE    (2'b00),
+        .ForwardBE    (2'b00),
+        .PCSrcE       (),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
@@ -68,7 +83,23 @@ module tb_fetch;
         .Rs2D         (Rs2D),
         .Funct7b5D    (Funct7b5D),
         .RD1D         (RD1D),
-        .RD2D         (RD2D)
+        .RD2D         (RD2D),
+        .ImmExtD      (),
+        .RD1E         (),
+        .RD2E         (),
+        .PCE          (),
+        .Rs1E         (),
+        .Rs2E         (),
+        .RdE          (),
+        .ImmExtE      (),
+        .PCPlus4E     (),
+        .RegWriteE    (),
+        .ResultSrcE   (),
+        .MemWriteE    (),
+        .JumpE        (),
+        .BranchE      (),
+        .ALUControlE  (),
+        .ALUSrcE      ()
     );
 
     initial begin
@@ -102,8 +133,10 @@ module tb_fetch;
 
     initial begin
         reset  = 1'b1;
+        StallF = 1'b0;
         StallD = 1'b0;
         FlushD = 1'b0;
+        FlushE = 1'b0;
 
         @(posedge clk);
         check_fetch(32'h0000_0000, 32'h0010_0093, 32'b0,
@@ -125,7 +158,7 @@ module tb_fetch;
                     32'h0000_0008, 32'h0000_000c, "fetch address 8");
 
         // StallD congela somente o IF/ID. O PC continua avancando porque
-        // StallF ainda permanece inativo nesta etapa do projeto.
+        // StallF permanece inativo neste teste.
         @(negedge clk);
         StallD = 1'b1;
         @(posedge clk);

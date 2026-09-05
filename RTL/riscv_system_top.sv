@@ -22,7 +22,7 @@ module riscv_system_top #(
     logic [31:0] data_rdata;
 
     // Estes nomes reproduzem o caminho do diagrama. O sufixo F identifica
-    // sinais do estagio Fetch; o sufixo D identifica a saida do IF/ID.
+    // sinais do estagio Fetch; o sufixo D identifica o estagio Decode.
     logic [31:0] PCF;
     logic [31:0] PCPlus4F;
     logic [31:0] InstrF;
@@ -40,6 +40,25 @@ module riscv_system_top #(
     logic        Funct7b5D;
     logic [31:0] RD1D;
     logic [31:0] RD2D;
+    logic [31:0] ImmExtD;
+
+    // Saidas do novo registrador ID/EX. Elas ainda nao alimentam a ALU real;
+    // ficam nomeadas e posicionadas para a proxima etapa do pipeline.
+    logic [31:0] RD1E;
+    logic [31:0] RD2E;
+    logic [31:0] PCE;
+    logic [4:0]  Rs1E;
+    logic [4:0]  Rs2E;
+    logic [4:0]  RdE;
+    logic [31:0] ImmExtE;
+    logic [31:0] PCPlus4E;
+    logic        RegWriteE;
+    logic [1:0]  ResultSrcE;
+    logic        MemWriteE;
+    logic        JumpE;
+    logic        BranchE;
+    logic [2:0]  ALUControlE;
+    logic        ALUSrcE;
 
     // A IMEM permanece fora do core. Sua saida combinacional forma InstrF,
     // que entra no datapath e sera registrada no IF/ID no proximo clock.
@@ -55,8 +74,7 @@ module riscv_system_top #(
     );
 
     // O core recebe InstrF da memoria e devolve PCF como endereco da busca.
-    // InstrD alimenta a separacao estrutural dos campos; a interpretacao desses
-    // campos pela control_unit sera implementada somente em uma etapa futura.
+    // Agora tambem entrega os dados e controles registrados na fronteira ID/EX.
     riscv_core u_riscv_core (
         .clk          (clk),
         .reset        (reset),
@@ -84,7 +102,23 @@ module riscv_system_top #(
         .Rs2D         (Rs2D),
         .Funct7b5D    (Funct7b5D),
         .RD1D         (RD1D),
-        .RD2D         (RD2D)
+        .RD2D         (RD2D),
+        .ImmExtD      (ImmExtD),
+        .RD1E         (RD1E),
+        .RD2E         (RD2E),
+        .PCE          (PCE),
+        .Rs1E         (Rs1E),
+        .Rs2E         (Rs2E),
+        .RdE          (RdE),
+        .ImmExtE      (ImmExtE),
+        .PCPlus4E     (PCPlus4E),
+        .RegWriteE    (RegWriteE),
+        .ResultSrcE   (ResultSrcE),
+        .MemWriteE    (MemWriteE),
+        .JumpE        (JumpE),
+        .BranchE      (BranchE),
+        .ALUControlE  (ALUControlE),
+        .ALUSrcE      (ALUSrcE)
     );
 
     // A DMEM ja ocupa seu lugar no sistema, mas fica desabilitada ate a LSU

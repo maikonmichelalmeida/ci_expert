@@ -1,0 +1,288 @@
+`timescale 1ns/1ps
+
+// Teste estrutural do Decode e do registrador ID/EX.
+// Ele instancia o datapath diretamente para poder aplicar controles D nao
+// nulos sem transformar a control_unit em um decoder funcional antes da hora.
+module tb_decode_id_ex;
+
+    localparam logic [1:0] IMM_I = 2'b00;
+    localparam logic [1:0] IMM_S = 2'b01;
+    localparam logic [1:0] IMM_B = 2'b10;
+    localparam logic [1:0] IMM_J = 2'b11;
+
+    logic clk;
+    logic reset;
+    logic [31:0] InstrF;
+
+    logic       RegWriteD;
+    logic [1:0] ResultSrcD;
+    logic       MemWriteD;
+    logic       JumpD;
+    logic       BranchD;
+    logic [2:0] ALUControlD;
+    logic       ALUSrcD;
+    logic [1:0] ImmSrcD;
+
+    logic       StallF;
+    logic       StallD;
+    logic       FlushD;
+    logic       FlushE;
+    logic [1:0] ForwardAE;
+    logic [1:0] ForwardBE;
+
+    logic [4:0]  rd_addr;
+    logic [31:0] rd_data;
+    logic        rd_we;
+
+    logic [31:0] PCF;
+    logic [31:0] PCPlus4F;
+    logic [31:0] InstrD;
+    logic [31:0] PCD;
+    logic [31:0] PCPlus4D;
+    logic [6:0]  OpD;
+    logic [4:0]  RdD;
+    logic [2:0]  Funct3D;
+    logic [4:0]  Rs1D;
+    logic [4:0]  Rs2D;
+    logic        Funct7b5D;
+    logic [31:0] RD1D;
+    logic [31:0] RD2D;
+    logic [31:0] ImmExtD;
+
+    logic [31:0] RD1E;
+    logic [31:0] RD2E;
+    logic [31:0] PCE;
+    logic [4:0]  Rs1E;
+    logic [4:0]  Rs2E;
+    logic [4:0]  RdE;
+    logic [31:0] ImmExtE;
+    logic [31:0] PCPlus4E;
+    logic        RegWriteE;
+    logic [1:0]  ResultSrcE;
+    logic        MemWriteE;
+    logic        JumpE;
+    logic        BranchE;
+    logic [2:0]  ALUControlE;
+    logic        ALUSrcE;
+
+    datapath dut (
+        .clk          (clk),
+        .reset        (reset),
+        .alu_a        (32'b0),
+        .alu_b        (32'b0),
+        .alu_op       (4'b1111),
+        .alu_result   (),
+        .alu_zero     (),
+        .alu_negative (),
+        .alu_carry    (),
+        .alu_overflow (),
+        .rd_addr      (rd_addr),
+        .rd_data      (rd_data),
+        .rd_we        (rd_we),
+        .InstrF       (InstrF),
+        .RegWriteD    (RegWriteD),
+        .ResultSrcD   (ResultSrcD),
+        .MemWriteD    (MemWriteD),
+        .JumpD        (JumpD),
+        .BranchD      (BranchD),
+        .ALUControlD  (ALUControlD),
+        .ALUSrcD      (ALUSrcD),
+        .ImmSrcD      (ImmSrcD),
+        .StallF       (StallF),
+        .StallD       (StallD),
+        .FlushD       (FlushD),
+        .FlushE       (FlushE),
+        .ForwardAE    (ForwardAE),
+        .ForwardBE    (ForwardBE),
+        .PCSrcE       (),
+        .PCF          (PCF),
+        .PCPlus4F     (PCPlus4F),
+        .InstrD       (InstrD),
+        .PCD          (PCD),
+        .PCPlus4D     (PCPlus4D),
+        .OpD          (OpD),
+        .RdD          (RdD),
+        .Funct3D      (Funct3D),
+        .Rs1D         (Rs1D),
+        .Rs2D         (Rs2D),
+        .Funct7b5D    (Funct7b5D),
+        .RD1D         (RD1D),
+        .RD2D         (RD2D),
+        .ImmExtD      (ImmExtD),
+        .RD1E         (RD1E),
+        .RD2E         (RD2E),
+        .PCE          (PCE),
+        .Rs1E         (Rs1E),
+        .Rs2E         (Rs2E),
+        .RdE          (RdE),
+        .ImmExtE      (ImmExtE),
+        .PCPlus4E     (PCPlus4E),
+        .RegWriteE    (RegWriteE),
+        .ResultSrcE   (ResultSrcE),
+        .MemWriteE    (MemWriteE),
+        .JumpE        (JumpE),
+        .BranchE      (BranchE),
+        .ALUControlE  (ALUControlE),
+        .ALUSrcE      (ALUSrcE)
+    );
+
+    initial begin
+        clk = 1'b0;
+        forever #5 clk = ~clk;
+    end
+
+    task automatic write_register (
+        input logic [4:0]  address,
+        input logic [31:0] data
+    );
+        begin
+            @(negedge clk);
+            rd_addr = address;
+            rd_data = data;
+            rd_we   = 1'b1;
+            @(posedge clk);
+            #1;
+            rd_we = 1'b0;
+        end
+    endtask
+
+    task automatic check_immediate (
+        input logic [31:0] instruction,
+        input logic [1:0]  immediate_source,
+        input logic [31:0] expected,
+        input string       test_name
+    );
+        begin
+            @(negedge clk);
+            InstrF  = instruction;
+            ImmSrcD = immediate_source;
+            StallD  = 1'b0;
+            FlushD  = 1'b0;
+            @(posedge clk);
+            #1;
+            if (ImmExtD !== expected) begin
+                $fatal(1, "FAIL %s: InstrD=%h ImmExtD=%h expected=%h",
+                       test_name, InstrD, ImmExtD, expected);
+            end
+            $display("PASS: %s immediate = %h", test_name, ImmExtD);
+        end
+    endtask
+
+    task automatic check_id_ex_transfer;
+        begin
+            #1;
+            if ((RD1E        !== RD1D)       ||
+                (RD2E        !== RD2D)       ||
+                (PCE         !== PCD)        ||
+                (Rs1E        !== Rs1D)       ||
+                (Rs2E        !== Rs2D)       ||
+                (RdE         !== RdD)        ||
+                (ImmExtE     !== ImmExtD)    ||
+                (PCPlus4E    !== PCPlus4D)   ||
+                (RegWriteE   !== RegWriteD)  ||
+                (ResultSrcE  !== ResultSrcD) ||
+                (MemWriteE   !== MemWriteD)  ||
+                (JumpE       !== JumpD)      ||
+                (BranchE     !== BranchD)    ||
+                (ALUControlE !== ALUControlD)||
+                (ALUSrcE     !== ALUSrcD)) begin
+                $fatal(1, "FAIL ID/EX: a signal was not transported from D to E");
+            end
+            $display("PASS: ID/EX transports data and control signals from D to E");
+        end
+    endtask
+
+    task automatic check_id_ex_clear;
+        begin
+            #1;
+            if ((RD1E        !== 32'b0) || (RD2E       !== 32'b0) ||
+                (PCE         !== 32'b0) || (Rs1E       !== 5'b0)  ||
+                (Rs2E        !== 5'b0)  || (RdE        !== 5'b0)  ||
+                (ImmExtE     !== 32'b0) || (PCPlus4E   !== 32'b0) ||
+                (RegWriteE   !== 1'b0)  || (ResultSrcE !== 2'b00) ||
+                (MemWriteE   !== 1'b0)  || (JumpE      !== 1'b0)  ||
+                (BranchE     !== 1'b0)  || (ALUControlE!== 3'b000)||
+                (ALUSrcE     !== 1'b0)) begin
+                $fatal(1, "FAIL FlushE: ID/EX was not cleared");
+            end
+            $display("PASS: FlushE clears every ID/EX data and control field");
+        end
+    endtask
+
+    initial begin
+        reset       = 1'b1;
+        InstrF      = 32'b0;
+        RegWriteD   = 1'b0;
+        ResultSrcD  = 2'b00;
+        MemWriteD   = 1'b0;
+        JumpD       = 1'b0;
+        BranchD     = 1'b0;
+        ALUControlD = 3'b000;
+        ALUSrcD     = 1'b0;
+        ImmSrcD     = IMM_I;
+        StallF      = 1'b0;
+        StallD      = 1'b0;
+        FlushD      = 1'b0;
+        FlushE      = 1'b0;
+        ForwardAE   = 2'b00;
+        ForwardBE   = 2'b00;
+        rd_addr     = 5'b0;
+        rd_data     = 32'b0;
+        rd_we       = 1'b0;
+
+        // Prepara dois valores conhecidos no caminho temporario de escrita.
+        write_register(5'd1, 32'h1111_1111);
+        write_register(5'd2, 32'h2222_2222);
+
+        @(negedge clk);
+        reset = 1'b0;
+
+        // Cada instrucao abaixo exercita uma montagem diferente do Extend.
+        check_immediate(32'hfff0_0093, IMM_I, 32'hffff_ffff, "I format -1");
+        check_immediate(32'hfe20_ae23, IMM_S, 32'hffff_fffc, "S format -4");
+        check_immediate(32'h0000_0463, IMM_B, 32'h0000_0008, "B format +8");
+        check_immediate(32'h0100_006f, IMM_J, 32'h0000_0010, "J format +16");
+
+        // Coloca ADD x3,x1,x2 no Decode e aplica um padrao nao nulo em cada
+        // controle. A control_unit real continua neutra; este estimulo existe
+        // apenas para provar que o registrador ID/EX transporta os fios.
+        @(negedge clk);
+        InstrF      = 32'h0020_81b3;
+        ImmSrcD     = IMM_I;
+        RegWriteD   = 1'b1;
+        ResultSrcD  = 2'b10;
+        MemWriteD   = 1'b1;
+        JumpD       = 1'b1;
+        BranchD     = 1'b1;
+        ALUControlD = 3'b101;
+        ALUSrcD     = 1'b1;
+        @(posedge clk);
+        #1;
+
+        if ((OpD       !== 7'b0110011) || (Rs1D !== 5'd1) ||
+            (Rs2D      !== 5'd2)       || (RdD  !== 5'd3) ||
+            (Funct3D   !== 3'b000)     || (Funct7b5D !== 1'b0)) begin
+            $fatal(1, "FAIL Decode: ADD fields were not extracted correctly");
+        end
+        if ((RD1D !== 32'h1111_1111) || (RD2D !== 32'h2222_2222)) begin
+            $fatal(1, "FAIL Decode: Register File data did not reach RD1D/RD2D");
+        end
+        $display("PASS: Decode fields and Register File reads remain correct");
+
+        // Congelar o IF/ID mantem os sinais D estaveis enquanto o ID/EX tira
+        // sua fotografia no clock seguinte. Nao existe StallE no diagrama.
+        @(negedge clk);
+        StallD = 1'b1;
+        @(posedge clk);
+        check_id_ex_transfer();
+
+        @(negedge clk);
+        FlushE = 1'b1;
+        @(posedge clk);
+        check_id_ex_clear();
+
+        $display("PASS: all Decode, Extend and ID/EX tests completed");
+        $finish;
+    end
+
+endmodule
