@@ -1,12 +1,23 @@
 // Caminho de dados do core. Neste ponto do projeto ele reune PC, IF/ID,
 // Decode, ID/EX, Execute e banco de registradores, preservando os nomes do diagrama.
 module datapath (
+    // ---------------- Sinais gerais do datapath ----------------
     input  logic clk,
     input  logic reset,
+
+    // -------- Escrita temporaria no Register File --------
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
     input  logic        rd_we,
+
+    // ---------------- Entrada do IF/ID ----------------
+    // InstrF, PCF e PCPlus4F formam os dados que entram no grande
+    // registrador IF/ID. PCF e PCPlus4F sao gerados dentro do datapath.
     input  logic [31:0] InstrF,
+
+    // ---------------- Entradas do ID/EX ----------------
+    // Estes controles com sufixo D atravessam juntos o grande registrador
+    // ID/EX e aparecem no Execute com o mesmo nome terminado em E.
     input  logic        RegWriteD,
     input  logic [1:0]  ResultSrcD,
     input  logic        MemWriteD,
@@ -15,19 +26,33 @@ module datapath (
     input  logic [3:0]  ALUControlD,
     input  logic        ALUSrcD,
     input  logic [2:0]  ImmSrcD,
+
+    // -------- Controle dos registradores de pipeline --------
     input  logic        StallF,
     input  logic        StallD,
     input  logic        FlushD,
     input  logic        FlushE,
+
+    // -------- Controles reservados para forwarding --------
     input  logic [1:0]  ForwardAE,
     input  logic [1:0]  ForwardBE,
+
+    // ---------------- Estagio Fetch (F) ----------------
     output logic        PCSrcE,
     output logic [31:0] PCTargetE,
     output logic [31:0] PCF,
     output logic [31:0] PCPlus4F,
+
+    // ---------------- Saidas do IF/ID ----------------
+    // InstrD, PCD e PCPlus4D formam, em conjunto, o conteudo armazenado
+    // no grande registrador IF/ID mostrado no diagrama.
     output logic [31:0] InstrD,
     output logic [31:0] PCD,
     output logic [31:0] PCPlus4D,
+
+    // ---------------- Estagio Decode (D) ----------------
+    // Estes sinais sao produzidos em Decode e servem como dados de entrada
+    // do grande registrador ID/EX.
     output logic [6:0]  OpD,
     output logic [4:0]  RdD,
     output logic [2:0]  Funct3D,
@@ -37,6 +62,10 @@ module datapath (
     output logic [31:0] RD1D,
     output logic [31:0] RD2D,
     output logic [31:0] ImmExtD,
+
+    // ---------------- Saidas do ID/EX ----------------
+    // Todos os sinais abaixo sao capturados juntos no clock e formam o
+    // conteudo do grande registrador ID/EX mostrado no diagrama.
     output logic [31:0] RD1E,
     output logic [31:0] RD2E,
     output logic [31:0] PCE,
@@ -52,6 +81,8 @@ module datapath (
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
     output logic        ALUSrcE,
+
+    // ---------------- Estagio Execute (E) ----------------
     output logic [31:0] SrcAE,
     output logic [31:0] WriteDataE,
     output logic [31:0] SrcBE,
@@ -83,16 +114,6 @@ module datapath (
         .PCNextF   (PCNextF)
     );
 
-    // ========================================================================
-    // IF/ID PIPELINE REGISTER
-    // Estes sinais, embora declarados separadamente em SystemVerilog, formam
-    // coletivamente o grande registrador IF/ID mostrado no diagrama:
-    // InstrF/PCF/PCPlus4F -> InstrD/PCD/PCPlus4D.
-    // InstrD guarda a instrucao buscada, enquanto PCD e PCPlus4D guardam os
-    // enderecos que pertencem a essa mesma instrucao no estagio Decode.
-    // Exemplo: se InstrF esta em PCF=8, no clock sao guardados PCD=8 e
-    // PCPlus4D=12 junto com essa instrucao, mesmo que PCF avance para 12.
-    // ========================================================================
     always_ff @(posedge clk) begin
         // Flush possui prioridade sobre Stall para remover uma instrucao invalida.
         // Zerar os tres campos equivale a inserir uma bolha no estagio Decode.
@@ -146,12 +167,6 @@ module datapath (
         .rs2_data (RD2D)
     );
 
-    // ========================================================================
-    // ID/EX PIPELINE REGISTER
-    // Estes sinais formam coletivamente o grande registrador ID/EX do diagrama.
-    // E como se fosse uma fotografia, tirada no flanco de subida, dos dados e
-    // controles da mesma instrucao. Depois do clock, os nomes mudam de D para E.
-    // ========================================================================
     always_ff @(posedge clk) begin
         // Reset ou FlushE insere uma bolha segura no Execute. Todos os enables
         // de escrita ficam em zero, assim como os dados observaveis.
@@ -189,10 +204,6 @@ module datapath (
             ALUSrcE     <= ALUSrcD;
         end
     end
-
-    // ========================================================================
-    // EXECUTE STAGE
-    // ========================================================================
 
     // Caminho normal provisoriamente selecionado pelos futuros muxes de
     // forwarding. Isto nao remove nem altera a arquitetura desses muxes:
