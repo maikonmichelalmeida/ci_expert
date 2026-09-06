@@ -66,18 +66,16 @@ module tb_decode_id_ex;
     logic        BranchE;
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
+    logic [31:0] SrcAE;
+    logic [31:0] WriteDataE;
+    logic [31:0] SrcBE;
+    logic [31:0] ALUResultE;
+    logic        ZeroE;
+    logic [31:0] PCTargetE;
 
     datapath dut (
         .clk          (clk),
         .reset        (reset),
-        .alu_a        (32'b0),
-        .alu_b        (32'b0),
-        .alu_op       (4'b1111),
-        .alu_result   (),
-        .alu_zero     (),
-        .alu_negative (),
-        .alu_carry    (),
-        .alu_overflow (),
         .rd_addr      (rd_addr),
         .rd_data      (rd_data),
         .rd_we        (rd_we),
@@ -97,6 +95,7 @@ module tb_decode_id_ex;
         .ForwardAE    (ForwardAE),
         .ForwardBE    (ForwardBE),
         .PCSrcE       (),
+        .PCTargetE    (PCTargetE),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
@@ -125,7 +124,12 @@ module tb_decode_id_ex;
         .JumpE        (JumpE),
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
-        .ALUSrcE      (ALUSrcE)
+        .ALUSrcE      (ALUSrcE),
+        .SrcAE        (SrcAE),
+        .WriteDataE   (WriteDataE),
+        .SrcBE        (SrcBE),
+        .ALUResultE   (ALUResultE),
+        .ZeroE        (ZeroE)
     );
 
     initial begin
@@ -211,6 +215,29 @@ module tb_decode_id_ex;
         end
     endtask
 
+    task automatic check_execute (
+        input logic [31:0] expected_src_a,
+        input logic [31:0] expected_write_data,
+        input logic [31:0] expected_src_b,
+        input logic [31:0] expected_result,
+        input logic        expected_zero,
+        input string       test_name
+    );
+        begin
+            #1;
+            if ((SrcAE      !== expected_src_a)      ||
+                (WriteDataE !== expected_write_data) ||
+                (SrcBE      !== expected_src_b)      ||
+                (ALUResultE !== expected_result)     ||
+                (ZeroE      !== expected_zero)) begin
+                $fatal(1,
+                    "FAIL %s: SrcAE=%h WriteDataE=%h SrcBE=%h ALUResultE=%h ZeroE=%b",
+                    test_name, SrcAE, WriteDataE, SrcBE, ALUResultE, ZeroE);
+            end
+            $display("PASS: %s", test_name);
+        end
+    endtask
+
     initial begin
         reset       = 1'b1;
         InstrF      = 32'b0;
@@ -286,7 +313,108 @@ module tb_decode_id_ex;
         @(posedge clk);
         check_id_ex_clear();
 
-        $display("PASS: all Decode, Extend and ID/EX tests completed");
+        // Prepara valores pequenos para deixar os calculos do Execute faceis
+        // de acompanhar: x1=10 e x2=20.
+        write_register(5'd1, 32'd10);
+        write_register(5'd2, 32'd20);
+
+        // Reinicia apenas PC e registradores de pipeline. O Register File nao
+        // possui reset e conserva os valores 10 e 20 escritos acima.
+        @(negedge clk);
+        reset       = 1'b1;
+        FlushE      = 1'b0;
+        StallD      = 1'b0;
+        FlushD      = 1'b0;
+        InstrF      = 32'b0;
+        ALUControlD = 4'b0000;
+        ALUSrcD     = 1'b0;
+        ImmSrcD     = IMM_I;
+        @(posedge clk);
+        #1;
+
+        // Caso registrador-registrador: ADD recebe x1=10 e x2=20.
+        @(negedge clk);
+        reset       = 1'b0;
+        InstrF      = 32'h0020_81b3;
+        ALUControlD = 4'b0000;
+        ALUSrcD     = 1'b0;
+        ImmSrcD     = IMM_I;
+        @(posedge clk);
+        @(negedge clk);
+        StallD = 1'b1;
+        @(posedge clk);
+        check_execute(32'd10, 32'd20, 32'd20, 32'd30, 1'b0,
+                      "Execute register-register ADD");
+
+        // Caso imediato: ADDI fornece x1=10 e imediato 5. A control_unit nao
+        // decodifica ADDI; o testbench aplica ALUSrcD e ALUControlD diretamente.
+        @(negedge clk);
+        StallD      = 1'b0;
+        InstrF      = 32'h0050_8093;
+        ALUControlD = 4'b0000;
+        ALUSrcD     = 1'b1;
+        ImmSrcD     = IMM_I;
+        @(posedge clk);
+        @(negedge clk);
+        StallD = 1'b1;
+        @(posedge clk);
+        #1;
+        if ((SrcAE !== 32'd10) || (SrcBE !== 32'd5) ||
+            (ALUResultE !== 32'd15)) begin
+            $fatal(1, "FAIL Execute immediate: SrcAE=%h SrcBE=%h ALUResultE=%h",
+                   SrcAE, SrcBE, ALUResultE);
+        end
+        $display("PASS: Execute immediate ADD");
+
+        // SUB x1-x1 exercita ZeroE sem implementar comparacao de branch.
+        @(negedge clk);
+        StallD      = 1'b0;
+        InstrF      = 32'h0010_8033;
+        ALUControlD = 4'b0001;
+        ALUSrcD     = 1'b0;
+        @(posedge clk);
+        @(negedge clk);
+        StallD = 1'b1;
+        @(posedge clk);
+        #1;
+        if ((ALUResultE !== 32'b0) || (ZeroE !== 1'b1)) begin
+            $fatal(1, "FAIL Execute ZeroE: ALUResultE=%h ZeroE=%b",
+                   ALUResultE, ZeroE);
+        end
+        $display("PASS: Execute ZeroE");
+
+        // Reinicia o PC e avanca ate 100 para conferir o somador de alvo com
+        // um imediato J de 16: PCTargetE deve ser 100 + 16 = 116.
+        @(negedge clk);
+        reset  = 1'b1;
+        StallD = 1'b0;
+        InstrF = 32'b0;
+        @(posedge clk);
+        @(negedge clk);
+        reset = 1'b0;
+
+        repeat (25) @(posedge clk);
+        @(negedge clk);
+        if (PCF !== 32'd100) begin
+            $fatal(1, "FAIL PCTarget setup: PCF=%h expected=00000064", PCF);
+        end
+        InstrF      = 32'h0100_006f;
+        ImmSrcD     = IMM_J;
+        ALUControlD = 4'b0000;
+        ALUSrcD     = 1'b1;
+        @(posedge clk);
+        @(negedge clk);
+        StallD = 1'b1;
+        @(posedge clk);
+        #1;
+        if ((PCE !== 32'd100) || (ImmExtE !== 32'd16) ||
+            (PCTargetE !== 32'd116)) begin
+            $fatal(1, "FAIL PCTargetE: PCE=%h ImmExtE=%h PCTargetE=%h",
+                   PCE, ImmExtE, PCTargetE);
+        end
+        $display("PASS: PCTargetE = PCE + ImmExtE");
+
+        $display("PASS: all Decode, Extend, ID/EX and Execute tests completed");
         $finish;
     end
 

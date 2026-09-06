@@ -1,18 +1,10 @@
 // Topo do sistema: conecta o core as memorias de instrucao e dados.
-// As portas da ALU e a escrita do register file ainda sao acessos de teste.
+// A escrita do register file ainda e um acesso temporario de teste.
 module riscv_system_top #(
     parameter IMEM_INIT_FILE = ""
 )(
     input  logic clk,
     input  logic reset,
-    input  logic [31:0] alu_a,
-    input  logic [31:0] alu_b,
-    input  logic [3:0]  alu_op,
-    output logic [31:0] alu_result,
-    output logic        alu_zero,
-    output logic        alu_negative,
-    output logic        alu_carry,
-    output logic        alu_overflow,
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
     input  logic        rd_we
@@ -42,8 +34,8 @@ module riscv_system_top #(
     logic [31:0] RD2D;
     logic [31:0] ImmExtD;
 
-    // Saidas do novo registrador ID/EX. Elas ainda nao alimentam a ALU real;
-    // ficam nomeadas e posicionadas para a proxima etapa do pipeline.
+    // Saidas do registrador ID/EX. Elas alimentam o Execute estrutural, mas
+    // ainda nao atravessam um registrador EX/MEM.
     logic [31:0] RD1E;
     logic [31:0] RD2E;
     logic [31:0] PCE;
@@ -60,6 +52,14 @@ module riscv_system_top #(
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
 
+    // Caminho combinacional do estagio Execute, ainda sem EX/MEM.
+    logic [31:0] SrcAE;
+    logic [31:0] WriteDataE;
+    logic [31:0] SrcBE;
+    logic [31:0] ALUResultE;
+    logic        ZeroE;
+    logic [31:0] PCTargetE;
+
     // A IMEM permanece fora do core. Sua saida combinacional forma InstrF,
     // que entra no datapath e sera registrada no IF/ID no proximo clock.
     // IMEM_INIT_FILE e repassado sem alterar o conteudo: no testbench, por
@@ -73,19 +73,11 @@ module riscv_system_top #(
         .rdata (InstrF)
     );
 
-    // O core recebe InstrF da memoria e devolve PCF como endereco da busca.
-    // Agora tambem entrega os dados e controles registrados na fronteira ID/EX.
+    // O core recebe InstrF da memoria, devolve PCF como endereco da busca e
+    // mantem internamente o caminho ate o Execute estrutural.
     riscv_core u_riscv_core (
         .clk          (clk),
         .reset        (reset),
-        .alu_a        (alu_a),
-        .alu_b        (alu_b),
-        .alu_op       (alu_op),
-        .alu_result   (alu_result),
-        .alu_zero     (alu_zero),
-        .alu_negative (alu_negative),
-        .alu_carry    (alu_carry),
-        .alu_overflow (alu_overflow),
         .rd_addr      (rd_addr),
         .rd_data      (rd_data),
         .rd_we        (rd_we),
@@ -118,7 +110,13 @@ module riscv_system_top #(
         .JumpE        (JumpE),
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
-        .ALUSrcE      (ALUSrcE)
+        .ALUSrcE      (ALUSrcE),
+        .SrcAE        (SrcAE),
+        .WriteDataE   (WriteDataE),
+        .SrcBE        (SrcBE),
+        .ALUResultE   (ALUResultE),
+        .ZeroE        (ZeroE),
+        .PCTargetE    (PCTargetE)
     );
 
     // A DMEM ja ocupa seu lugar no sistema, mas fica desabilitada ate a LSU

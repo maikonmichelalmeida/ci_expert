@@ -17,11 +17,6 @@ module tb_fetch;
 
     // As demais portas do datapath continuam presentes, mas nao participam
     // deste teste focado exclusivamente nos estagios Fetch e Decode.
-    logic [31:0] alu_result;
-    logic        alu_zero;
-    logic        alu_negative;
-    logic        alu_carry;
-    logic        alu_overflow;
     logic [6:0]  OpD;
     logic [4:0]  RdD;
     logic [2:0]  Funct3D;
@@ -44,14 +39,6 @@ module tb_fetch;
     datapath dut (
         .clk          (clk),
         .reset        (reset),
-        .alu_a        (32'b0),
-        .alu_b        (32'b0),
-        .alu_op       (4'b1111),
-        .alu_result   (alu_result),
-        .alu_zero     (alu_zero),
-        .alu_negative (alu_negative),
-        .alu_carry    (alu_carry),
-        .alu_overflow (alu_overflow),
         .rd_addr      (5'b0),
         .rd_data      (32'b0),
         .rd_we        (1'b0),
@@ -71,6 +58,7 @@ module tb_fetch;
         .ForwardAE    (2'b00),
         .ForwardBE    (2'b00),
         .PCSrcE       (),
+        .PCTargetE    (),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
@@ -99,7 +87,12 @@ module tb_fetch;
         .JumpE        (),
         .BranchE      (),
         .ALUControlE  (),
-        .ALUSrcE      ()
+        .ALUSrcE      (),
+        .SrcAE        (),
+        .WriteDataE   (),
+        .SrcBE        (),
+        .ALUResultE   (),
+        .ZeroE        ()
     );
 
     initial begin

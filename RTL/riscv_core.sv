@@ -3,14 +3,6 @@
 module riscv_core (
     input  logic clk,
     input  logic reset,
-    input  logic [31:0] alu_a,
-    input  logic [31:0] alu_b,
-    input  logic [3:0]  alu_op,
-    output logic [31:0] alu_result,
-    output logic        alu_zero,
-    output logic        alu_negative,
-    output logic        alu_carry,
-    output logic        alu_overflow,
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
     input  logic        rd_we,
@@ -43,7 +35,13 @@ module riscv_core (
     output logic        JumpE,
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
-    output logic        ALUSrcE
+    output logic        ALUSrcE,
+    output logic [31:0] SrcAE,
+    output logic [31:0] WriteDataE,
+    output logic [31:0] SrcBE,
+    output logic [31:0] ALUResultE,
+    output logic        ZeroE,
+    output logic [31:0] PCTargetE
 );
 
     // Controles do estagio Decode. A control_unit ja dirige os fios definitivos,
@@ -73,14 +71,6 @@ module riscv_core (
     datapath u_datapath (
         .clk          (clk),
         .reset        (reset),
-        .alu_a        (alu_a),
-        .alu_b        (alu_b),
-        .alu_op       (alu_op),
-        .alu_result   (alu_result),
-        .alu_zero     (alu_zero),
-        .alu_negative (alu_negative),
-        .alu_carry    (alu_carry),
-        .alu_overflow (alu_overflow),
         .rd_addr      (rd_addr),
         .rd_data      (rd_data),
         .rd_we        (rd_we),
@@ -100,6 +90,7 @@ module riscv_core (
         .ForwardAE    (ForwardAE),
         .ForwardBE    (ForwardBE),
         .PCSrcE       (PCSrcE),
+        .PCTargetE    (PCTargetE),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
         .InstrD       (InstrD),
@@ -128,7 +119,12 @@ module riscv_core (
         .JumpE        (JumpE),
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
-        .ALUSrcE      (ALUSrcE)
+        .ALUSrcE      (ALUSrcE),
+        .SrcAE        (SrcAE),
+        .WriteDataE   (WriteDataE),
+        .SrcBE        (SrcBE),
+        .ALUResultE   (ALUResultE),
+        .ZeroE        (ZeroE)
     );
 
     // O decoder ainda nao interpreta nenhuma instrucao. Esta conexao apenas

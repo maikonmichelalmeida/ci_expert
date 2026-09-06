@@ -1,16 +1,8 @@
 // Caminho de dados do core. Neste ponto do projeto ele reune PC, IF/ID,
-// Decode, ID/EX, ALU e banco de registradores, preservando os nomes do diagrama.
+// Decode, ID/EX, Execute e banco de registradores, preservando os nomes do diagrama.
 module datapath (
     input  logic clk,
     input  logic reset,
-    input  logic [31:0] alu_a,
-    input  logic [31:0] alu_b,
-    input  logic [3:0]  alu_op,
-    output logic [31:0] alu_result,
-    output logic        alu_zero,
-    output logic        alu_negative,
-    output logic        alu_carry,
-    output logic        alu_overflow,
     input  logic [4:0]  rd_addr,
     input  logic [31:0] rd_data,
     input  logic        rd_we,
@@ -30,6 +22,7 @@ module datapath (
     input  logic [1:0]  ForwardAE,
     input  logic [1:0]  ForwardBE,
     output logic        PCSrcE,
+    output logic [31:0] PCTargetE,
     output logic [31:0] PCF,
     output logic [31:0] PCPlus4F,
     output logic [31:0] InstrD,
@@ -58,18 +51,24 @@ module datapath (
     output logic        JumpE,
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
-    output logic        ALUSrcE
+    output logic        ALUSrcE,
+    output logic [31:0] SrcAE,
+    output logic [31:0] WriteDataE,
+    output logic [31:0] SrcBE,
+    output logic [31:0] ALUResultE,
+    output logic        ZeroE
 );
 
     // Sinais ao redor do PC no diagrama: PCSrcE controla o mux, PCTargetE sera
     // o endereco alternativo e StallF sera o enable invertido do registrador PC.
-    logic [31:0] PCTargetE;
     logic [31:0] PCNextF;
+    logic        NegativeE;
+    logic        CarryE;
+    logic        OverflowE;
 
     // Branch e jump ainda nao sao funcionais. Zero sempre escolhe PCPlus4F.
     // StallF, por outro lado, ja vem da hazard_unit pela conexao definitiva.
-    assign PCSrcE    = 1'b0;
-    assign PCTargetE = 32'b0;
+    assign PCSrcE = 1'b0;
 
     // O submodulo pc implementa o registrador PCF, o somador PC+4 e o mux
     // PCNextF. O datapath apenas transporta esses sinais entre os estagios.
@@ -84,11 +83,16 @@ module datapath (
         .PCNextF   (PCNextF)
     );
 
-    // Registrador de pipeline IF/ID.
+    // ========================================================================
+    // IF/ID PIPELINE REGISTER
+    // Estes sinais, embora declarados separadamente em SystemVerilog, formam
+    // coletivamente o grande registrador IF/ID mostrado no diagrama:
+    // InstrF/PCF/PCPlus4F -> InstrD/PCD/PCPlus4D.
     // InstrD guarda a instrucao buscada, enquanto PCD e PCPlus4D guardam os
     // enderecos que pertencem a essa mesma instrucao no estagio Decode.
     // Exemplo: se InstrF esta em PCF=8, no clock sao guardados PCD=8 e
     // PCPlus4D=12 junto com essa instrucao, mesmo que PCF avance para 12.
+    // ========================================================================
     always_ff @(posedge clk) begin
         // Flush possui prioridade sobre Stall para remover uma instrucao invalida.
         // Zerar os tres campos equivale a inserir uma bolha no estagio Decode.
@@ -128,19 +132,6 @@ module datapath (
         .ImmExtD (ImmExtD)
     );
 
-    // Nesta etapa, os operandos e o controle da ULA ainda sao portas de teste.
-    // A instancia preserva o local definitivo da ALU dentro do datapath.
-    alu u_alu (
-        .a        (alu_a),
-        .b        (alu_b),
-        .alu_op   (alu_op),
-        .result   (alu_result),
-        .zero     (alu_zero),
-        .negative (alu_negative),
-        .carry    (alu_carry),
-        .overflow (alu_overflow)
-    );
-
     // A leitura vem da instrucao real: Rs1D e Rs2D escolhem os dois
     // registradores, e seus conteudos aparecem no diagrama como RD1D e RD2D.
     // A escrita ainda usa o caminho externo temporario ate existir Writeback.
@@ -155,9 +146,12 @@ module datapath (
         .rs2_data (RD2D)
     );
 
-    // Registrador de pipeline ID/EX. E como se fosse uma fotografia, tirada
-    // no flanco de subida, dos dados e controles da mesma instrucao em Decode.
-    // Depois do clock, os nomes mudam do sufixo D para o sufixo E.
+    // ========================================================================
+    // ID/EX PIPELINE REGISTER
+    // Estes sinais formam coletivamente o grande registrador ID/EX do diagrama.
+    // E como se fosse uma fotografia, tirada no flanco de subida, dos dados e
+    // controles da mesma instrucao. Depois do clock, os nomes mudam de D para E.
+    // ========================================================================
     always_ff @(posedge clk) begin
         // Reset ou FlushE insere uma bolha segura no Execute. Todos os enables
         // de escrita ficam em zero, assim como os dados observaveis.
@@ -196,8 +190,40 @@ module datapath (
         end
     end
 
-    // ForwardAE e ForwardBE chegam da hazard_unit no local previsto pelo
-    // diagrama. Os muxes de forwarding ainda nao existem, portanto esses fios
-    // ficam reservados e nao alteram a ULA de teste nesta etapa.
+    // ========================================================================
+    // EXECUTE STAGE
+    // ========================================================================
+
+    // Caminho normal provisoriamente selecionado pelos futuros muxes de
+    // forwarding. Isto nao remove nem altera a arquitetura desses muxes:
+    // ForwardAE e ForwardBE continuam chegando ao datapath e, quando existirem
+    // ALUResultM e ResultW, selecionarao tambem essas fontes como no diagrama.
+    assign SrcAE      = RD1E;
+    assign WriteDataE = RD2E;
+
+    // ALUSrcE forma o mux da segunda entrada da ALU. Zero usa o segundo dado
+    // do Register File; um usa o imediato ja registrado no ID/EX.
+    assign SrcBE = ALUSrcE ? ImmExtE : WriteDataE;
+
+    // O somador de alvo ja ocupa seu lugar no Execute, mas PCSrcE permanece
+    // zero. Portanto PCTargetE ainda nao redireciona o PC nesta etapa.
+    assign PCTargetE = PCE + ImmExtE;
+
+    // A ALU agora pertence ao caminho real do pipeline. ALUControlE possui os
+    // mesmos 4 bits de alu_op, sem decoder intermediario ou ajuste de largura.
+    alu u_alu (
+        .a        (SrcAE),
+        .b        (SrcBE),
+        .alu_op   (ALUControlE),
+        .result   (ALUResultE),
+        .zero     (ZeroE),
+        .negative (NegativeE),
+        .carry    (CarryE),
+        .overflow (OverflowE)
+    );
+
+    // NegativeE, CarryE e OverflowE preservam as demais flags da ALU. Ainda
+    // nao existe logica do pipeline que as consuma; somente ZeroE aparece no
+    // caminho de branch previsto pelo diagrama atual.
 
 endmodule
