@@ -2,7 +2,7 @@
 
 // Teste estrutural do Decode e do registrador ID/EX.
 // Ele instancia o datapath diretamente para poder aplicar controles D nao
-// nulos, inclusive combinacoes que o decoder minimo de ADDI nao produz.
+// nulos, inclusive combinacoes que o decoder de OP-IMM nao produz.
 module tb_decode_id_ex;
 
     localparam logic [2:0] IMM_I        = 3'b000;
@@ -325,7 +325,7 @@ module tb_decode_id_ex;
                         "reserved ImmSrcD");
 
         // Coloca ADD x3,x1,x2 no Decode e aplica um padrao nao nulo em cada
-        // controle. A control_unit real so reconhece ADDI; este estimulo existe
+        // controle. A control_unit real so reconhece OP-IMM; este estimulo existe
         // apenas para provar que o registrador ID/EX transporta os fios.
         @(negedge clk);
         InstrF      = 32'h0020_81b3;
@@ -356,7 +356,9 @@ module tb_decode_id_ex;
         StallD = 1'b1;
         @(posedge clk);
         check_id_ex_transfer();
+        // Primeiro clock: o padrao conferido em E chega a M; W recebe o M anterior.
         check_late_pipeline_transfer();
+        // Segundo clock: o mesmo padrao agora chega a W. A repeticao e intencional.
         check_late_pipeline_transfer();
 
         @(negedge clk);

@@ -1,4 +1,4 @@
-// Decodificacao minima do processador: neste checkpoint reconhece apenas ADDI.
+// Decodificacao da familia OP-IMM do RV32I usando as operacoes da ALU atual.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -29,14 +29,54 @@ module control_unit (
         ALUSrcD     = 1'b0;
         ImmSrcD     = 3'b000;
 
-        // ADDI soma rs1 ao imediato I e leva a saida da ALU ate o Writeback.
-        // Exemplo: 00100093 e addi x1,x0,1. O bit Funct7b5D pertence ao
-        // imediato neste formato; ele nao restringe o reconhecimento de ADDI.
-        if (!reset && (OpD == 7'b0010011) && (Funct3D == 3'b000)) begin
-            RegWriteD = 1'b1;
-            ALUSrcD   = 1'b1;
+        if (!reset) begin
+            case (OpD)
+                7'b0010011: begin // OP-IMM: rs1 e imediato I -> ALU -> WB.
+                    RegWriteD = 1'b1;
+                    ALUSrcD   = 1'b1;
+                    case (Funct3D)
+                        3'b000: ALUControlD = 4'b0000; // ADDI
+                        3'b010: ALUControlD = 4'b0101; // SLTI, signed
+                        3'b011: ALUControlD = 4'b0110; // SLTIU, unsigned
+                        3'b100: ALUControlD = 4'b0100; // XORI
+                        3'b110: ALUControlD = 4'b0011; // ORI
+                        3'b111: ALUControlD = 4'b0010; // ANDI
+                        3'b001: begin // SLLI exige bit 30 igual a zero.
+                            if (Funct7b5D == 1'b0) begin
+                                ALUControlD = 4'b0111;
+                            end else begin
+                                RegWriteD = 1'b0;
+                                ALUSrcD   = 1'b0;
+                            end
+                        end
+                        3'b101: begin
+                            case (Funct7b5D)
+                                1'b0: ALUControlD = 4'b1000; // SRLI
+                                1'b1: ALUControlD = 4'b1001; // SRAI
+                                default: begin
+                                    RegWriteD = 1'b0;
+                                    ALUSrcD   = 1'b0;
+                                end
+                            endcase
+                        end
+                        default: begin
+                            RegWriteD = 1'b0;
+                            ALUSrcD   = 1'b0;
+                        end
+                    endcase
+                end
+                default: begin
+                    // Outros opcodes conservam os defaults sem efeitos de escrita.
+                end
+            endcase
         end
     end
+
+    // O Extend continua fazendo extensao de sinal inclusive em SLTIU:
+    // imediato -1 chega como 0xffffffff antes da comparacao unsigned.
+    // Nos shifts, a ALU usa somente B[4:0]; nao precisamos de outro caminho.
+    // Validamos apenas o bit 30 disponivel para os shifts. Os outros bits
+    // superiores reservados ainda nao sao validados, e nao existe trap ilegal.
 
     // clk permanece na interface existente. O controle e combinacional,
     // sem estado interno; reset apenas mantem os comandos inativos.

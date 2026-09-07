@@ -1,0 +1,12 @@
+../tb/_tb_op_imm.sv
+../RTL/riscv_system_top.sv
+../RTL/riscv_core.sv
+../RTL/datapath.sv
+../RTL/pc.sv
+../RTL/extend.sv
+../RTL/alu.sv
+../RTL/register_file.sv
+../RTL/control_unit.sv
+../RTL/hazard_unit.sv
+../RTL/instruction_memory.sv
+../RTL/data_memory.sv

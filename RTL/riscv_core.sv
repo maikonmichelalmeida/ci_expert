@@ -46,7 +46,7 @@ module riscv_core (
 );
 
     // Controles do estagio Decode. A control_unit ja dirige os fios definitivos,
-    // reconhecendo apenas ADDI e mantendo defaults seguros para os demais casos.
+    // reconhecendo OP-IMM e mantendo defaults seguros para os demais casos.
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
@@ -129,7 +129,7 @@ module riscv_core (
         .ZeroE        (ZeroE)
     );
 
-    // O decoder combina OpD/funct para reconhecer somente ADDI. Seus controles
+    // O decoder combina OpD/funct para reconhecer OP-IMM. Seus controles
     // seguem com os dados da instrucao pelos registradores de pipeline.
     control_unit u_control_unit (
         .clk         (clk),

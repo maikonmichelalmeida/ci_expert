@@ -1,0 +1,27 @@
+00a00093 // addi x1,x0,10
+00000013 // Quatro NOPs: x1 deve estar escrito antes dos consumidores em Decode.
+00000013
+00000013
+00000013
+0060f113 // andi x2,x1,6
+0050e193 // ori x3,x1,5
+0030c213 // xori x4,x1,3
+00b0a293 // slti x5,x1,11
+0090b313 // sltiu x6,x1,9
+00209393 // slli x7,x1,2
+0010d413 // srli x8,x1,1
+ff800493 // addi x9,x0,-8
+00000013 // Quatro NOPs: x9 deve estar escrito antes dos consumidores em Decode.
+00000013
+00000013
+00000013
+4014d513 // srai x10,x9,1
+fff03613 // sltiu x12,x0,-1
+0004a693 // slti x13,x9,0: -8 < 0, signed
+0004b713 // sltiu x14,x9,0: 0xfffffff8 < 0, unsigned
+00009793 // slli x15,x1,0
+0004d813 // srli x16,x9,0
+4004d893 // srai x17,x9,0
+01f29913 // slli x18,x5,31: 1 << 31
+01f4d993 // srli x19,x9,31
+41f4da13 // srai x20,x9,31
