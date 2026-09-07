@@ -80,9 +80,7 @@ module tb_memories;
 
     task automatic check_dmem (
         input logic [31:0] address,
-        input logic [31:0] expected,
-        input logic [31:0] previous,
-        input logic        check_previous
+        input logic [31:0] expected
     );
         begin
             @(negedge clk);
@@ -91,14 +89,8 @@ module tb_memories;
             dmem_wstrb = 4'b0000;
             #1;
 
-            // A mudanca de endereco nao altera rdata antes do proximo clock.
-            if (check_previous && (dmem_rdata !== previous)) begin
-                $fatal(1, "FAIL DMEM latency: rdata=%h expected_previous=%h",
-                       dmem_rdata, previous);
-            end
-
-            @(posedge clk);
-            #1;
+            // A leitura classica responde ao endereco no mesmo ciclo MEM,
+            // sem depender de um novo flanco de clock.
             if (dmem_rdata !== expected) begin
                 $fatal(1, "FAIL DMEM address=%h rdata=%h expected=%h",
                        address, dmem_rdata, expected);
@@ -136,31 +128,31 @@ module tb_memories;
 
         // Palavra completa em uma posicao.
         write_dmem(1'b1, 32'h0000_0000, 32'h1122_3344, 4'b1111);
-        check_dmem(32'h0000_0000, 32'h1122_3344, 32'b0, 1'b0);
+        check_dmem(32'h0000_0000, 32'h1122_3344);
 
         // A DMEM aceita os bits baixos do endereco; a futura LSU cuidara do alinhamento.
-        check_dmem(32'h0000_0001, 32'h1122_3344, 32'h1122_3344, 1'b1);
+        check_dmem(32'h0000_0001, 32'h1122_3344);
 
         // Somente o byte 1 deve mudar.
         write_dmem(1'b1, 32'h0000_0000, 32'h0000_aa00, 4'b0010);
-        check_dmem(32'h0000_0000, 32'h1122_aa44, 32'b0, 1'b0);
+        check_dmem(32'h0000_0000, 32'h1122_aa44);
 
         // Somente os bytes 2 e 3 devem mudar.
         write_dmem(1'b1, 32'h0000_0000, 32'hbeef_0000, 4'b1100);
-        check_dmem(32'h0000_0000, 32'hbeef_aa44, 32'b0, 1'b0);
+        check_dmem(32'h0000_0000, 32'hbeef_aa44);
 
         // wstrb zerado nao pode alterar a palavra.
         write_dmem(1'b1, 32'h0000_0000, 32'hdead_beef, 4'b0000);
-        check_dmem(32'h0000_0000, 32'hbeef_aa44, 32'b0, 1'b0);
+        check_dmem(32'h0000_0000, 32'hbeef_aa44);
 
         // Usa a ultima palavra dos 2 KiB para conferir o indice do endereco.
         write_dmem(1'b1, 32'h0000_07fc, 32'h5566_7788, 4'b1111);
-        check_dmem(32'h0000_0000, 32'hbeef_aa44, 32'b0,         1'b0);
-        check_dmem(32'h0000_07fc, 32'h5566_7788, 32'hbeef_aa44, 1'b1);
+        check_dmem(32'h0000_0000, 32'hbeef_aa44);
+        check_dmem(32'h0000_07fc, 32'h5566_7788);
 
         // Mesmo com strobes ativos, en=0 deve impedir a escrita.
         write_dmem(1'b0, 32'h0000_07fc, 32'hffff_ffff, 4'b1111);
-        check_dmem(32'h0000_07fc, 32'h5566_7788, 32'b0, 1'b0);
+        check_dmem(32'h0000_07fc, 32'h5566_7788);
 
         $display("PASS: all instruction and data memory tests completed");
         $display("=== TEST FINISHED ===");

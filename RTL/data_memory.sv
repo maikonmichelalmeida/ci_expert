@@ -1,5 +1,5 @@
 // Memoria de dados configuravel, com 2 KiB por padrao, em quatro bancos de bytes.
-// A separacao por bytes prepara escritas futuras de SB, SH e SW por meio de wstrb.
+// A separacao por bytes permite escritas de SB, SH e SW por meio de wstrb.
 module data_memory #(
     parameter integer MEM_BYTES = 2048
 )(
@@ -34,19 +34,28 @@ module data_memory #(
     // Exemplo: addr=0x000 seleciona indice 0; addr=0x004 seleciona indice 1.
     assign word_index = addr[INDEX_WIDTH+1:2];
 
-    // Leitura e escrita acontecem somente no flanco de subida e apenas com en=1.
-    // E como se en fosse a chave geral que autoriza um acesso a DMEM naquele ciclo.
-    always_ff @(posedge clk) begin
+    // No pipeline classico, ReadDataM precisa aparecer durante o proprio ciclo
+    // MEM para o MEM/WB captura-lo no proximo posedge. Por isso a leitura nao
+    // possui registrador interno: mudar addr muda rdata combinacionalmente.
+    always_comb begin
+        rdata = 32'b0;
+
         if (en) begin
-            // A concatenacao recompõe a palavra na ordem little-endian usada
-            // pelo RV32I: o banco de byte mais alto ocupa rdata[31:24].
-            rdata <= {
+            // A concatenacao recompõe a palavra little-endian: o byte do banco
+            // mais alto ocupa rdata[31:24] e byte0 ocupa rdata[7:0].
+            rdata = {
                 mem_byte3[word_index],
                 mem_byte2[word_index],
                 mem_byte1[word_index],
                 mem_byte0[word_index]
             };
+        end
+    end
 
+    // A escrita continua exclusivamente no flanco de subida. E como se en
+    // fosse a chave geral e cada bit de wstrb liberasse apenas um byte bank.
+    always_ff @(posedge clk) begin
+        if (en) begin
             // Cada bit de wstrb habilita somente seu banco. Por exemplo,
             // wstrb=4'b0010 altera apenas os bits [15:8] da palavra armazenada.
             if (wstrb[0]) mem_byte0[word_index] <= wdata[7:0];
