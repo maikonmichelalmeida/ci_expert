@@ -17,6 +17,7 @@ module datapath (
     input  logic [1:0]  ResultSrcD,
     input  logic        MemWriteD,
     input  logic [2:0]  StoreControlD,
+    input  logic [2:0]  LoadControlD,
     input  logic        JumpD,
     input  logic        JalrD,
     input  logic        BranchD,
@@ -79,6 +80,7 @@ module datapath (
     output logic [1:0]  ResultSrcE,
     output logic        MemWriteE,
     output logic [2:0]  StoreControlE,
+    output logic [2:0]  LoadControlE,
     output logic        JumpE,
     output logic        JalrE,
     output logic        BranchE,
@@ -99,16 +101,22 @@ module datapath (
     output logic [31:0] WriteDataM,
     output logic        MemWriteM,
     output logic [2:0]  StoreControlM,
+    output logic [2:0]  LoadControlM,
     output logic        RegWriteM,
     output logic [4:0]  RdM,
+
+    // ---------------- Formatacao de LOAD no estagio MEM ----------------
+    output logic        LoadAccessValidM,
+    output logic        LoadEnableM,
+    output logic [31:0] LoadDataM,
 
     // -------- MEM/WB PIPELINE REGISTER: sinais para forwarding --------
     output logic        RegWriteW,
     output logic [4:0]  RdW,
 
     // ---------------- Entrada do estagio MEM ----------------
-    // A DMEM continua sincrona. Este fio prepara o caminho de dados de leitura,
-    // mas LOAD ainda depende do tratamento correto dessa latencia no futuro.
+    // A DMEM fornece uma palavra bruta por leitura combinacional. O datapath
+    // seleciona e estende byte/half antes de registrar o dado no MEM/WB.
     input  logic [31:0] ReadDataM
 );
 
@@ -125,6 +133,10 @@ module datapath (
     logic [31:0] ALUResultW;
     logic [31:0] ReadDataW;
     logic [31:0] PCPlus4W;
+
+    // ---------------- Selecao de byte/half para LOAD ----------------
+    logic [4:0]  LoadShiftAmountM;
+    logic [31:0] ShiftedReadDataM;
 
     // ---------------- Estagio Writeback (W) ----------------
     logic [31:0] ResultW;
@@ -250,6 +262,7 @@ module datapath (
             ResultSrcE  <= 2'b00;
             MemWriteE   <= 1'b0;
             StoreControlE <= 3'b000;
+            LoadControlE  <= 3'b000;
             JumpE       <= 1'b0;
             JalrE       <= 1'b0;
             BranchE     <= 1'b0;
@@ -270,6 +283,7 @@ module datapath (
             ResultSrcE  <= ResultSrcD;
             MemWriteE   <= MemWriteD;
             StoreControlE <= StoreControlD;
+            LoadControlE  <= LoadControlD;
             JumpE       <= JumpD;
             JalrE       <= JalrD;
             BranchE     <= BranchD;
@@ -364,6 +378,7 @@ module datapath (
             ResultSrcM <= 2'b00;
             MemWriteM  <= 1'b0;
             StoreControlM <= 3'b000;
+            LoadControlM  <= 3'b000;
             ALUResultM <= 32'b0;
             WriteDataM <= 32'b0;
             RdM        <= 5'b0;
@@ -373,10 +388,60 @@ module datapath (
             ResultSrcM <= ResultSrcE;
             MemWriteM  <= MemWriteE;
             StoreControlM <= StoreControlE;
+            LoadControlM  <= LoadControlE;
             ALUResultM <= ALUResultE;
             WriteDataM <= WriteDataE;
             RdM        <= RdE;
             PCPlus4M   <= PCPlus4E;
+        end
+    end
+
+    // Os dois bits baixos escolhem uma das quatro byte lanes. A concatenacao
+    // converte offsets 0/1/2/3 em shifts de 0/8/16/24 bits, sem multiplicador.
+    assign LoadShiftAmountM = {ALUResultM[1:0], 3'b000};
+    assign ShiftedReadDataM = ReadDataM >> LoadShiftAmountM;
+
+    // ResultSrcM=01 identifica unicamente uma carga. Byte aceita qualquer
+    // endereco; halfword exige bit 0 zero; word exige os dois bits baixos zero.
+    // Como traps ainda nao existem, uma carga desalinhada e apenas suprimida.
+    always_comb begin
+        LoadAccessValidM = 1'b0;
+
+        if (ResultSrcM == 2'b01) begin
+            case (LoadControlM)
+                3'b000, 3'b100: LoadAccessValidM = 1'b1; // LB/LBU
+                3'b001, 3'b101: begin // LH/LHU
+                    LoadAccessValidM = (ALUResultM[0] == 1'b0);
+                end
+                3'b010: begin // LW
+                    LoadAccessValidM = (ALUResultM[1:0] == 2'b00);
+                end
+                default: LoadAccessValidM = 1'b0;
+            endcase
+        end
+    end
+
+    assign LoadEnableM = !reset && (ResultSrcM == 2'b01) && LoadAccessValidM;
+
+    // ReadDataM continua sendo a palavra fisica bruta da DMEM. LoadDataM e o
+    // valor arquitetural que segue ao WB depois da selecao little-endian e da
+    // extensao definida por LB/LH/LW/LBU/LHU.
+    always_comb begin
+        LoadDataM = 32'b0;
+
+        if (LoadEnableM) begin
+            case (LoadControlM)
+                3'b000: LoadDataM = {{24{ShiftedReadDataM[7]}},
+                                     ShiftedReadDataM[7:0]};  // LB
+                3'b001: LoadDataM = {{16{ShiftedReadDataM[15]}},
+                                     ShiftedReadDataM[15:0]}; // LH
+                3'b010: LoadDataM = ReadDataM;                // LW
+                3'b100: LoadDataM = {24'b0,
+                                     ShiftedReadDataM[7:0]};  // LBU
+                3'b101: LoadDataM = {16'b0,
+                                     ShiftedReadDataM[15:0]}; // LHU
+                default: LoadDataM = 32'b0;
+            endcase
         end
     end
 
@@ -389,12 +454,15 @@ module datapath (
             RdW        <= 5'b0;
             PCPlus4W   <= 32'b0;
         end else begin
-            RegWriteW  <= RegWriteM;
+            // Para LOAD desalinhado, bloqueia o unico efeito arquitetural antes
+            // de WB. Instrucoes que nao sao LOAD preservam RegWriteM integralmente.
+            RegWriteW  <= RegWriteM &&
+                          ((ResultSrcM != 2'b01) || LoadAccessValidM);
             ResultSrcW <= ResultSrcM;
             ALUResultW <= ALUResultM;
-            // Captura a saida atual da DMEM sem mudar seu timing. Para OP e
-            // OP-IMM ela nao e usada; esta conexao ainda nao executa LOAD.
-            ReadDataW  <= ReadDataM;
+            // A leitura combinacional e formatada em MEM e capturada aqui. O
+            // mux ResultSrcW=01 a entrega ao Register File no estagio WB.
+            ReadDataW  <= LoadDataM;
             RdW        <= RdM;
             PCPlus4W   <= PCPlus4M;
         end
@@ -402,7 +470,7 @@ module datapath (
 
     // Mux final do diagrama: 00 retorna a ALU, 01 a memoria e 10 o PC+4.
     // OP/OP-IMM/LUI/AUIPC escolhem 00; JAL escolhe 10 para gravar PC+4 em rd.
-    // A entrada 01 permanece preparada para LOAD; 11 devolve zero.
+    // LOAD escolhe 01; a entrada reservada 11 devolve zero.
     always_comb begin
         ResultW = 32'b0;
         case (ResultSrcW)

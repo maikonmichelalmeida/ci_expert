@@ -20,6 +20,7 @@ module tb_decode_id_ex;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
     logic [2:0] StoreControlD;
+    logic [2:0] LoadControlD;
     logic       JumpD;
     logic       JalrD;
     logic       BranchD;
@@ -65,6 +66,7 @@ module tb_decode_id_ex;
     logic [1:0]  ResultSrcE;
     logic        MemWriteE;
     logic [2:0]  StoreControlE;
+    logic [2:0]  LoadControlE;
     logic        JumpE;
     logic        JalrE;
     logic        BranchE;
@@ -79,6 +81,7 @@ module tb_decode_id_ex;
     logic        ZeroE;
     logic [31:0] PCTargetE;
     logic [2:0]  StoreControlM;
+    logic [2:0]  LoadControlM;
 
     datapath dut (
         .clk          (clk),
@@ -88,6 +91,10 @@ module tb_decode_id_ex;
         .WriteDataM   (),
         .MemWriteM    (),
         .StoreControlM(StoreControlM),
+        .LoadControlM (LoadControlM),
+        .LoadAccessValidM(),
+        .LoadEnableM  (),
+        .LoadDataM    (),
         .RegWriteM    (),
         .RdM          (),
         .RegWriteW    (),
@@ -97,6 +104,7 @@ module tb_decode_id_ex;
         .ResultSrcD   (ResultSrcD),
         .MemWriteD    (MemWriteD),
         .StoreControlD(StoreControlD),
+        .LoadControlD (LoadControlD),
         .JumpD        (JumpD),
         .JalrD        (JalrD),
         .BranchD      (BranchD),
@@ -139,6 +147,7 @@ module tb_decode_id_ex;
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
         .StoreControlE(StoreControlE),
+        .LoadControlE (LoadControlE),
         .JumpE        (JumpE),
         .JalrE        (JalrE),
         .BranchE      (BranchE),
@@ -179,6 +188,7 @@ module tb_decode_id_ex;
             ResultSrcD  = 2'b00;
             MemWriteD   = 1'b0;
             StoreControlD = 3'b000;
+            LoadControlD  = 3'b000;
             JumpD       = 1'b0;
             JalrD       = 1'b0;
             BranchD     = 1'b0;
@@ -211,20 +221,24 @@ module tb_decode_id_ex;
     endtask
 
     task automatic check_late_pipeline_transfer;
-        logic [107:0] expected_m;
+        logic [110:0] expected_m;
         logic [103:0] expected_w;
         begin
             @(negedge clk);
             // Fotografias das entradas ANTES do clock; depois do clock o
             // estagio anterior ja pode conter outra instrucao.
             expected_m = {RegWriteE, ResultSrcE, MemWriteE, StoreControlE,
+                          LoadControlE,
                           ALUResultE,
                           WriteDataE, RdE, PCPlus4E};
-            expected_w = {dut.RegWriteM, dut.ResultSrcM, dut.ALUResultM,
-                          ReadDataM, dut.RdM, dut.PCPlus4M};
+            expected_w = {dut.RegWriteM &&
+                          ((dut.ResultSrcM != 2'b01) || dut.LoadAccessValidM),
+                          dut.ResultSrcM, dut.ALUResultM,
+                          dut.LoadDataM, dut.RdM, dut.PCPlus4M};
             @(posedge clk);
             #1;
             if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, StoreControlM,
+                 LoadControlM,
                  dut.ALUResultM,
                  dut.WriteDataM, dut.RdM, dut.PCPlus4M} !== expected_m)
                 $fatal(1, "FAIL EX/MEM: fields did not travel together");
@@ -238,8 +252,9 @@ module tb_decode_id_ex;
     task automatic check_late_pipeline_reset;
         begin
             if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, StoreControlM,
+                 LoadControlM,
                  dut.ALUResultM, dut.WriteDataM, dut.RdM,
-                 dut.PCPlus4M} !== 108'b0)
+                 dut.PCPlus4M} !== 111'b0)
                 $fatal(1, "FAIL reset: EX/MEM was not cleared");
             if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
                  dut.RdW, dut.PCPlus4W} !== 104'b0)
@@ -255,6 +270,7 @@ module tb_decode_id_ex;
         begin
             @(negedge clk);
             ResultSrcD = source;
+            LoadControlD = (source == 2'b01) ? 3'b010 : 3'b000;
             // D -> E -> M -> W. RegWriteD=0: este teste so observa o mux.
             repeat (3) @(posedge clk);
             #1;
@@ -302,6 +318,7 @@ module tb_decode_id_ex;
                 (ResultSrcE  !== ResultSrcD) ||
                 (MemWriteE   !== MemWriteD)  ||
                 (StoreControlE !== StoreControlD) ||
+                (LoadControlE !== LoadControlD) ||
                 (JumpE       !== JumpD)      ||
                 (JalrE       !== JalrD)      ||
                 (BranchE     !== BranchD)    ||
@@ -325,6 +342,7 @@ module tb_decode_id_ex;
                 (RegWriteE   !== 1'b0)  || (ResultSrcE !== 2'b00) ||
                 (MemWriteE   !== 1'b0)  || (JumpE      !== 1'b0)  ||
                 (StoreControlE !== 3'b000) ||
+                (LoadControlE !== 3'b000) ||
                 (JalrE       !== 1'b0)  ||
                 (BranchE     !== 1'b0)  || (dut.BranchControlE !== 3'b000) ||
                 (ALUControlE !== 4'b0000) ||
@@ -365,6 +383,7 @@ module tb_decode_id_ex;
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
         StoreControlD = 3'b000;
+        LoadControlD  = 3'b000;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
@@ -422,6 +441,7 @@ module tb_decode_id_ex;
         ResultSrcD  = 2'b10;
         MemWriteD   = 1'b1;
         StoreControlD = 3'b110;
+        LoadControlD  = 3'b101;
         JumpD       = 1'b1;
         JalrD       = 1'b1;
         BranchD     = 1'b1;
@@ -475,6 +495,7 @@ module tb_decode_id_ex;
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
         StoreControlD = 3'b000;
+        LoadControlD  = 3'b000;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
@@ -570,7 +591,8 @@ module tb_decode_id_ex;
         $display("PASS: PCTargetE = PCE + ImmExtE");
 
         // O IF/ID ainda guarda PCD=100 e imediato=16, logo PC+4=104.
-        // As fontes de memoria e PC+4 sao testes de fios, nao de LOAD/JAL.
+        // A fonte de memoria usa LW para preservar os 32 bits de ReadDataM;
+        // as demais selecoes continuam sendo testes estruturais do mux.
         check_wb_mux(2'b00, 32'd16);
         check_wb_mux(2'b01, 32'h1234_5678);
         check_wb_mux(2'b10, 32'd104);

@@ -7,16 +7,21 @@ module riscv_system_top #(
     input  logic reset
 );
 
-    // Ligacoes estruturais com MEM. STORE usa os sinais classicos do EX/MEM;
-    // LOAD continua pendente e ReadDataM ainda nao produz resultado funcional.
+    // Ligacoes estruturais com MEM. ReadDataM e a palavra bruta da DMEM;
+    // LoadDataM e o valor ja selecionado e estendido dentro do datapath.
     logic [31:0] ReadDataM;
     logic [31:0] ALUResultM;
     logic [31:0] WriteDataM;
     logic        MemWriteM;
     logic [2:0]  StoreControlM;
+    logic [2:0]  LoadControlM;
+    logic        LoadAccessValidM;
+    logic        LoadEnableM;
+    logic [31:0] LoadDataM;
     logic [31:0] StoreDataM;
     logic [3:0]  StoreWStrbM;
     logic        StoreEnableM;
+    logic        DataMemoryEnableM;
     logic [4:0]  StoreShiftAmountM;
 
     // Estes nomes reproduzem o caminho do diagrama. O sufixo F identifica
@@ -53,6 +58,7 @@ module riscv_system_top #(
     logic [1:0]  ResultSrcE;
     logic        MemWriteE;
     logic [2:0]  StoreControlE;
+    logic [2:0]  LoadControlE;
     logic        JumpE;
     logic        JalrE;
     logic        BranchE;
@@ -92,6 +98,10 @@ module riscv_system_top #(
         .WriteDataM   (WriteDataM),
         .MemWriteM    (MemWriteM),
         .StoreControlM(StoreControlM),
+        .LoadControlM (LoadControlM),
+        .LoadAccessValidM(LoadAccessValidM),
+        .LoadEnableM  (LoadEnableM),
+        .LoadDataM    (LoadDataM),
         .InstrF       (InstrF),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
@@ -119,6 +129,7 @@ module riscv_system_top #(
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
         .StoreControlE(StoreControlE),
+        .LoadControlE (LoadControlE),
         .JumpE        (JumpE),
         .JalrE        (JalrE),
         .BranchE      (BranchE),
@@ -176,12 +187,16 @@ module riscv_system_top #(
         end
     end
 
+    // STORE e LOAD compartilham a mesma DMEM. Em uma carga, StoreWStrbM fica
+    // em zero, logo habilitar a leitura jamais escreve os bancos de bytes.
+    assign DataMemoryEnableM = StoreEnableM | LoadEnableM;
+
     // A DMEM continua generica: recebe endereco, dado alinhado e byte enables,
-    // sem conhecer opcode ou funct3. Sua escrita permanece no posedge.
-    // LOAD ainda exigira generalizar o enable e tratar a leitura sincrona.
+    // sem conhecer opcode ou funct3. A leitura e combinacional e a escrita
+    // permanece sincrona no posedge.
     data_memory u_data_memory (
         .clk   (clk),
-        .en    (StoreEnableM),
+        .en    (DataMemoryEnableM),
         .addr  (ALUResultM),
         .wdata (StoreDataM),
         .wstrb (StoreWStrbM),

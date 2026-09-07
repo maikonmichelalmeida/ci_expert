@@ -1,0 +1,71 @@
+10000313 // addi x6,x0,256
+80ff82b7 // lui  x5,0x80ff8
+f0128293 // addi x5,x5,-255
+00532023 // sw   x5,0(x6): 0x80ff7f01
+800182b7 // lui  x5,0x80018
+fff28293 // addi x5,x5,-1
+00532223 // sw   x5,4(x6): 0x80017fff
+deadc2b7 // lui  x5,0xdeadc
+eef28293 // addi x5,x5,-273
+00532423 // sw   x5,8(x6): 0xdeadbeef
+00502023 // sw   x5,0(x0)
+00001137 // lui  x2,1
+80010113 // addi x2,x2,-2048: x2=0x800
+fe512e23 // sw   x5,-4(x2): endereco 0x7fc
+00032623 // sw   x0,12(x6)
+f8000393 // addi x7,x0,-128
+007307a3 // sb   x7,15(x6): lane 3 de 0x10c
+00032823 // sw   x0,16(x6)
+000083b7 // lui  x7,8
+00138393 // addi x7,x7,1: x7=0x8001
+00731823 // sh   x7,16(x6)
+00030503 // lb   x10,0(x6)
+00130583 // lb   x11,1(x6)
+00230603 // lb   x12,2(x6)
+00330683 // lb   x13,3(x6)
+00234703 // lbu  x14,2(x6)
+00334783 // lbu  x15,3(x6)
+00431803 // lh   x16,4(x6)
+00631883 // lh   x17,6(x6)
+00635903 // lhu  x18,6(x6)
+00832983 // lw   x19,8(x6)
+00832003 // lw   x0,8(x6)
+00330003 // lb   x0,3(x6)
+00f34403 // lbu  x8,15(x6): le o SB real
+00f30483 // lb   x9,15(x6): le o SB real
+01031383 // lh   x7,16(x6): le o SH real
+01035a03 // lhu  x20,16(x6)
+ffc12a83 // lw   x21,-4(x2)
+7ff04b03 // lbu  x22,2047(x0)
+80014b83 // lbu  x23,-2048(x2)
+10000c13 // addi x24,x0,256
+008c2c83 // lw   x25,8(x24): base M->E
+10000c13 // addi x24,x0,256
+00000f93 // instrucao independente
+004c2d03 // lw   x26,4(x24): base W->E
+10000c13 // addi x24,x0,256
+00000f93 // instrucao independente
+00000f93 // instrucao independente
+000c2d83 // lw   x27,0(x24): base WB->Decode
+00032e03 // lw   x28,0(x6)
+00000f93 // separa LOAD do consumidor
+001e0e93 // addi x29,x28,1: resultado LOAD W->E
+00432e03 // lw   x28,4(x6)
+00000f93 // instrucao independente
+00000f93 // instrucao independente
+001e0f13 // addi x30,x28,1: resultado WB->Decode
+03300193 // addi x3,x0,51: sentinela
+04400213 // addi x4,x0,68: sentinela
+00131183 // lh   x3,1(x6): desalinhado
+00232203 // lw   x4,2(x6): desalinhado
+00033183 // LOAD funct3=011 invalido
+00036203 // LOAD funct3=110 invalido
+00037283 // LOAD funct3=111 invalido
+00000663 // beq  x0,x0,+12
+00832283 // lw   x5,8(x6): caminho errado
+00100293 // addi x5,x0,1: caminho errado
+07b00f93 // addi x31,x0,123: target
+00000013 // nop
+00000013 // nop
+00000013 // nop
+00000013 // nop

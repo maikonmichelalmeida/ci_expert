@@ -1,4 +1,4 @@
-// Decodificacao de OP-IMM, OP, STORE, LUI, AUIPC, JAL, JALR e branches RV32I.
+// Decodificacao de OP-IMM, OP, LOAD, STORE, LUI, AUIPC, JAL, JALR e branches.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -11,6 +11,7 @@ module control_unit (
     output logic [1:0] ResultSrcD,
     output logic       MemWriteD,
     output logic [2:0] StoreControlD,
+    output logic [2:0] LoadControlD,
     output logic       JumpD,
     output logic       JalrD,
     output logic       BranchD,
@@ -28,6 +29,7 @@ module control_unit (
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
         StoreControlD = 3'b000;
+        LoadControlD  = 3'b000;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
@@ -130,6 +132,27 @@ module control_unit (
                         default: RegWriteD = 1'b0;
                     endcase
                 end
+                7'b0000011: begin // LOAD: rs1+imediato I forma o endereco.
+                    case (Funct3D)
+                        3'b000, // LB
+                        3'b001, // LH
+                        3'b010, // LW
+                        3'b100, // LBU
+                        3'b101: begin // LHU
+                            RegWriteD    = 1'b1;
+                            ResultSrcD   = 2'b01;
+                            LoadControlD = Funct3D;
+                            ALUControlD  = 4'b0000; // ADD
+                            ALUSrcD      = 1'b1;
+                            ALUASrcD     = 1'b0;
+                            ImmSrcD      = 3'b000;  // Imediato I-type.
+                        end
+                        default: begin
+                            // funct3 011, 110 e 111 nao representam LOAD RV32I.
+                            // Sem traps, atravessam sem acesso ou escrita em rd.
+                        end
+                    endcase
+                end
                 7'b0100011: begin // STORE: rs1+imediato S forma o endereco.
                     case (Funct3D)
                         3'b000, // SB
@@ -219,6 +242,8 @@ module control_unit (
     // ResultSrcD=00 para seguir pelo caminho normal ALU -> M -> W.
     // STORE usa a mesma ALU para rs1+imediato S e conserva rs2 separado em
     // WriteDataE; StoreControlD informa ao estagio MEM se e SB, SH ou SW.
+    // LOAD tambem usa a ALU normal para rs1+imediato I. ResultSrcD=01 escolhe
+    // a memoria no WB e LoadControlD conserva o proprio funct3 ate MEM.
     // JAL e branch usam o somador PCE+ImmExtE. JALR configura a ALU como ADD
     // para formar SrcAE+ImmExtE; JalrE escolhe qual target alimenta o PC.
     // O decoder recebe somente InstrD[30]. Assim, reconhece as codificacoes

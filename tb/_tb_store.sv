@@ -403,7 +403,7 @@ module tb_store;
         $display("PASS: address/data forwarding, M priority and WB-Decode bypass");
         $display("PASS: offsets, x0, boundary and safe misaligned policy");
         $display("PASS: wrong-path and invalid stores have no side effects");
-        $display("PASS: STORE checkpoint completed; LOAD remains unimplemented");
+        $display("PASS: STORE checkpoint remains functional");
         $finish;
     end
 
