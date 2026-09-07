@@ -1,4 +1,4 @@
-// Decodificacao de OP-IMM, OP, JAL e JALR do RV32I.
+// Decodificacao de OP-IMM, OP, JAL, JALR e branches do RV32I.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -13,6 +13,7 @@ module control_unit (
     output logic       JumpD,
     output logic       JalrD,
     output logic       BranchD,
+    output logic [2:0] BranchControlD,
     output logic [3:0] ALUControlD,
     output logic       ALUSrcD,
     output logic [2:0] ImmSrcD
@@ -27,6 +28,7 @@ module control_unit (
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
+        BranchControlD = 3'b000;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
         ImmSrcD     = 3'b000;
@@ -144,6 +146,26 @@ module control_unit (
                         ImmSrcD     = 3'b000;
                     end
                 end
+                7'b1100011: begin // BRANCH: compara rs1 e rs2 no Execute.
+                    case (Funct3D)
+                        3'b000, // BEQ
+                        3'b001, // BNE
+                        3'b100, // BLT
+                        3'b101, // BGE
+                        3'b110, // BLTU
+                        3'b111: begin // BGEU
+                            BranchD        = 1'b1;
+                            BranchControlD = Funct3D;
+                            ALUControlD    = 4'b0001; // SUB preserva ZeroE.
+                            ALUSrcD        = 1'b0;
+                            ImmSrcD        = 3'b010;  // Imediato B-type.
+                        end
+                        default: begin
+                            // funct3 010 e 011 sao reservados. Sem suporte a
+                            // traps, atravessam como uma bolha sem redirect.
+                        end
+                    endcase
+                end
                 default: begin
                     // Outros opcodes conservam os defaults sem efeitos de escrita.
                 end
@@ -155,8 +177,8 @@ module control_unit (
     // imediato -1 chega como 0xffffffff antes da comparacao unsigned.
     // Nos shifts, a ALU usa somente B[4:0]; em OP, B recebe RD2E e, em OP-IMM,
     // recebe ImmExtE. Nao precisamos de outro caminho para o shift amount.
-    // JAL usa o somador PCE+ImmExtE. JALR configura a ALU como ADD para formar
-    // SrcAE+ImmExtE; JalrE escolhe depois qual desses targets alimenta o PC.
+    // JAL e branch usam o somador PCE+ImmExtE. JALR configura a ALU como ADD
+    // para formar SrcAE+ImmExtE; JalrE escolhe qual target alimenta o PC.
     // O decoder recebe somente InstrD[30]. Assim, reconhece as codificacoes
     // RV32I usadas aqui, mas ainda nao valida todos os sete bits de funct7,
     // nao implementa a extensao M e nao gera trap de instrucao ilegal.

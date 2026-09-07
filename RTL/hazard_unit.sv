@@ -1,5 +1,5 @@
 // Detector de dependencias do pipeline.
-// Forwarding e flush de JAL/JALR sao funcionais; os stalls continuam inativos.
+// Forwarding e flush de redirects sao funcionais; os stalls continuam inativos.
 module hazard_unit (
     input  logic clk,
     input  logic reset,
@@ -33,7 +33,8 @@ module hazard_unit (
         ForwardBE = 2'b00;
 
         if (!reset) begin
-            // Quando um jump chega a EX, descarta as duas instrucoes mais jovens:
+            // Quando um jump ou branch tomado chega a EX, descarta as duas
+            // instrucoes mais jovens:
             // uma esta em Decode e a outra acaba de ser buscada pelo Fetch.
             FlushD = PCSrcE;
             FlushE = PCSrcE;

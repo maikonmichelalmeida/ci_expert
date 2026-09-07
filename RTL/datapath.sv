@@ -19,6 +19,7 @@ module datapath (
     input  logic        JumpD,
     input  logic        JalrD,
     input  logic        BranchD,
+    input  logic [2:0]  BranchControlD,
     input  logic [3:0]  ALUControlD,
     input  logic        ALUSrcD,
 
@@ -132,13 +133,15 @@ module datapath (
     // o endereco alternativo e StallF sera o enable invertido do registrador PC.
     logic [31:0] PCNextF;
     logic [31:0] PCRelativeTargetE;
+    logic [2:0]  BranchControlE;
+    logic        BranchTakenE;
     logic        NegativeE;
     logic        CarryE;
     logic        OverflowE;
 
-    // JAL e JALR sao resolvidos no Execute. JumpE seleciona PCTargetE no mux
-    // do PC; branches continuam inativos porque ainda nao entram na expressao.
-    assign PCSrcE = JumpE;
+    // PCSrcE significa que existe um redirect tomado no Execute. JumpE cobre
+    // JAL/JALR; BranchE e BranchTakenE cobrem os seis branches condicionais.
+    assign PCSrcE = JumpE | (BranchE & BranchTakenE);
 
     // O submodulo pc implementa o registrador PCF, o somador PC+4 e o mux
     // PCNextF. O datapath apenas transporta esses sinais entre os estagios.
@@ -243,6 +246,7 @@ module datapath (
             JumpE       <= 1'b0;
             JalrE       <= 1'b0;
             BranchE     <= 1'b0;
+            BranchControlE <= 3'b000;
             ALUControlE <= 4'b0000;
             ALUSrcE     <= 1'b0;
         end else begin
@@ -260,6 +264,7 @@ module datapath (
             JumpE       <= JumpD;
             JalrE       <= JalrD;
             BranchE     <= BranchD;
+            BranchControlE <= BranchControlD;
             ALUControlE <= ALUControlD;
             ALUSrcE     <= ALUSrcD;
         end
@@ -293,7 +298,28 @@ module datapath (
     // OP-IMM continua usando ImmExtE na ALU, mesmo se ForwardBE estiver ativo.
     assign SrcBE = ALUSrcE ? ImmExtE : WriteDataE;
 
-    // JAL e futuros branches usam o target relativo ao PC. JALR reutiliza a
+    // A decisao usa os operandos depois dos muxes de forwarding. BEQ/BNE
+    // reaproveitam ZeroE da subtracao da ALU; as demais condicoes distinguem
+    // explicitamente comparacoes com e sem sinal.
+    always_comb begin
+        BranchTakenE = 1'b0;
+
+        if (!reset && BranchE) begin
+            case (BranchControlE)
+                3'b000: BranchTakenE = ZeroE; // BEQ
+                3'b001: BranchTakenE = !ZeroE; // BNE
+                3'b100: BranchTakenE = ($signed(SrcAE) <
+                                         $signed(WriteDataE)); // BLT
+                3'b101: BranchTakenE = ($signed(SrcAE) >=
+                                         $signed(WriteDataE)); // BGE
+                3'b110: BranchTakenE = (SrcAE < WriteDataE); // BLTU
+                3'b111: BranchTakenE = (SrcAE >= WriteDataE); // BGEU
+                default: BranchTakenE = 1'b0;
+            endcase
+        end
+    end
+
+    // JAL e branches usam o target relativo ao PC. JALR reutiliza a
     // ALU para SrcAE+ImmExtE e o mux abaixo limpa obrigatoriamente o bit zero.
     // Se o bit 1 resultar em 1, o futuro suporte a traps devera sinalizar o
     // desalinhamento de instrucao do RV32I sem extensao C.
@@ -314,9 +340,8 @@ module datapath (
         .overflow (OverflowE)
     );
 
-    // NegativeE, CarryE e OverflowE preservam as demais flags da ALU. Ainda
-    // nao existe logica do pipeline que as consuma; somente ZeroE aparece no
-    // caminho de branch previsto pelo diagrama atual.
+    // NegativeE, CarryE e OverflowE preservam as demais flags da ALU. BEQ/BNE
+    // usam ZeroE; os branches de ordem usam comparadores claros acima.
 
     always_ff @(posedge clk) begin
         if (reset) begin

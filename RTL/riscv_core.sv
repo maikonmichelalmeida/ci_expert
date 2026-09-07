@@ -46,14 +46,15 @@ module riscv_core (
     output logic [31:0] PCTargetE
 );
 
-    // Controles do estagio Decode. A control_unit ja reconhece OP-IMM, OP,
-    // JAL e JALR, mantendo defaults seguros nos demais casos.
+    // Controles do estagio Decode. A control_unit reconhece OP-IMM, OP,
+    // JAL, JALR e os seis branches, mantendo defaults seguros nos demais casos.
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
     logic       JumpD;
     logic       JalrD;
     logic       BranchD;
+    logic [2:0] BranchControlD;
     logic [3:0] ALUControlD;
     logic       ALUSrcD;
     logic [2:0] ImmSrcD;
@@ -94,6 +95,7 @@ module riscv_core (
         .JumpD        (JumpD),
         .JalrD        (JalrD),
         .BranchD      (BranchD),
+        .BranchControlD(BranchControlD),
         .ALUControlD  (ALUControlD),
         .ALUSrcD      (ALUSrcD),
         .ImmSrcD      (ImmSrcD),
@@ -156,13 +158,14 @@ module riscv_core (
         .JumpD       (JumpD),
         .JalrD       (JalrD),
         .BranchD     (BranchD),
+        .BranchControlD(BranchControlD),
         .ALUControlD (ALUControlD),
         .ALUSrcD     (ALUSrcD),
         .ImmSrcD     (ImmSrcD)
     );
 
     // A hazard_unit compara as fontes em E com M/W e usa PCSrcE para limpar
-    // as instrucoes mais jovens quando JAL ou JALR e resolvido no Execute.
+    // as instrucoes mais jovens quando jump ou branch e resolvido no Execute.
     hazard_unit u_hazard_unit (
         .clk       (clk),
         .reset     (reset),

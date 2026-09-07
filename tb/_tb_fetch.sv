@@ -55,6 +55,7 @@ module tb_fetch;
         .JumpD        (1'b0),
         .JalrD        (1'b0),
         .BranchD      (1'b0),
+        .BranchControlD(3'b000),
         .ALUControlD  (4'b0000),
         .ALUSrcD      (1'b0),
         .ImmSrcD      (3'b000),

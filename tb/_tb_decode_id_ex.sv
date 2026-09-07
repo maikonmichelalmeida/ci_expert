@@ -22,6 +22,7 @@ module tb_decode_id_ex;
     logic       JumpD;
     logic       JalrD;
     logic       BranchD;
+    logic [2:0] BranchControlD;
     logic [3:0] ALUControlD;
     logic       ALUSrcD;
     logic [2:0] ImmSrcD;
@@ -91,6 +92,7 @@ module tb_decode_id_ex;
         .JumpD        (JumpD),
         .JalrD        (JalrD),
         .BranchD      (BranchD),
+        .BranchControlD(BranchControlD),
         .ALUControlD  (ALUControlD),
         .ALUSrcD      (ALUSrcD),
         .ImmSrcD      (ImmSrcD),
@@ -249,6 +251,7 @@ module tb_decode_id_ex;
                 (JumpE       !== JumpD)      ||
                 (JalrE       !== JalrD)      ||
                 (BranchE     !== BranchD)    ||
+                (dut.BranchControlE !== BranchControlD) ||
                 (ALUControlE !== ALUControlD)||
                 (ALUSrcE     !== ALUSrcD)) begin
                 $fatal(1, "FAIL ID/EX: a signal was not transported from D to E");
@@ -267,7 +270,8 @@ module tb_decode_id_ex;
                 (RegWriteE   !== 1'b0)  || (ResultSrcE !== 2'b00) ||
                 (MemWriteE   !== 1'b0)  || (JumpE      !== 1'b0)  ||
                 (JalrE       !== 1'b0)  ||
-                (BranchE     !== 1'b0)  || (ALUControlE!== 4'b0000)||
+                (BranchE     !== 1'b0)  || (dut.BranchControlE !== 3'b000) ||
+                (ALUControlE !== 4'b0000) ||
                 (ALUSrcE     !== 1'b0)) begin
                 $fatal(1, "FAIL FlushE: ID/EX was not cleared");
             end
@@ -307,6 +311,7 @@ module tb_decode_id_ex;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
+        BranchControlD = 3'b000;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
         ImmSrcD     = IMM_I;
@@ -347,6 +352,7 @@ module tb_decode_id_ex;
         JumpD       = 1'b1;
         JalrD       = 1'b1;
         BranchD     = 1'b1;
+        BranchControlD = 3'b111;
         ALUControlD = 4'b1101;
         ALUSrcD     = 1'b1;
         @(posedge clk);
@@ -397,6 +403,7 @@ module tb_decode_id_ex;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
+        BranchControlD = 3'b000;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
         ImmSrcD     = IMM_I;
