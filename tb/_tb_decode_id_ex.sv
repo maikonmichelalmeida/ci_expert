@@ -20,6 +20,7 @@ module tb_decode_id_ex;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
     logic       JumpD;
+    logic       JalrD;
     logic       BranchD;
     logic [3:0] ALUControlD;
     logic       ALUSrcD;
@@ -61,6 +62,7 @@ module tb_decode_id_ex;
     logic [1:0]  ResultSrcE;
     logic        MemWriteE;
     logic        JumpE;
+    logic        JalrE;
     logic        BranchE;
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
@@ -87,6 +89,7 @@ module tb_decode_id_ex;
         .ResultSrcD   (ResultSrcD),
         .MemWriteD    (MemWriteD),
         .JumpD        (JumpD),
+        .JalrD        (JalrD),
         .BranchD      (BranchD),
         .ALUControlD  (ALUControlD),
         .ALUSrcD      (ALUSrcD),
@@ -125,6 +128,7 @@ module tb_decode_id_ex;
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
         .JumpE        (JumpE),
+        .JalrE        (JalrE),
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
         .ALUSrcE      (ALUSrcE),
@@ -243,6 +247,7 @@ module tb_decode_id_ex;
                 (ResultSrcE  !== ResultSrcD) ||
                 (MemWriteE   !== MemWriteD)  ||
                 (JumpE       !== JumpD)      ||
+                (JalrE       !== JalrD)      ||
                 (BranchE     !== BranchD)    ||
                 (ALUControlE !== ALUControlD)||
                 (ALUSrcE     !== ALUSrcD)) begin
@@ -261,6 +266,7 @@ module tb_decode_id_ex;
                 (ImmExtE     !== 32'b0) || (PCPlus4E   !== 32'b0) ||
                 (RegWriteE   !== 1'b0)  || (ResultSrcE !== 2'b00) ||
                 (MemWriteE   !== 1'b0)  || (JumpE      !== 1'b0)  ||
+                (JalrE       !== 1'b0)  ||
                 (BranchE     !== 1'b0)  || (ALUControlE!== 4'b0000)||
                 (ALUSrcE     !== 1'b0)) begin
                 $fatal(1, "FAIL FlushE: ID/EX was not cleared");
@@ -299,6 +305,7 @@ module tb_decode_id_ex;
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
         JumpD       = 1'b0;
+        JalrD       = 1'b0;
         BranchD     = 1'b0;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
@@ -338,6 +345,7 @@ module tb_decode_id_ex;
         ResultSrcD  = 2'b10;
         MemWriteD   = 1'b1;
         JumpD       = 1'b1;
+        JalrD       = 1'b1;
         BranchD     = 1'b1;
         ALUControlD = 4'b1101;
         ALUSrcD     = 1'b1;
@@ -387,6 +395,7 @@ module tb_decode_id_ex;
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
         JumpD       = 1'b0;
+        JalrD       = 1'b0;
         BranchD     = 1'b0;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;

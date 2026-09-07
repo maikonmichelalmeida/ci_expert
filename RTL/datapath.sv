@@ -17,6 +17,7 @@ module datapath (
     input  logic [1:0]  ResultSrcD,
     input  logic        MemWriteD,
     input  logic        JumpD,
+    input  logic        JalrD,
     input  logic        BranchD,
     input  logic [3:0]  ALUControlD,
     input  logic        ALUSrcD,
@@ -75,6 +76,7 @@ module datapath (
     output logic [1:0]  ResultSrcE,
     output logic        MemWriteE,
     output logic        JumpE,
+    output logic        JalrE,
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
     output logic        ALUSrcE,
@@ -129,12 +131,13 @@ module datapath (
     // Sinais ao redor do PC no diagrama: PCSrcE controla o mux, PCTargetE sera
     // o endereco alternativo e StallF sera o enable invertido do registrador PC.
     logic [31:0] PCNextF;
+    logic [31:0] PCRelativeTargetE;
     logic        NegativeE;
     logic        CarryE;
     logic        OverflowE;
 
-    // JAL e resolvido no Execute. JumpE seleciona PCTargetE no mux do PC;
-    // branches continuam inativos porque ainda nao entram nesta expressao.
+    // JAL e JALR sao resolvidos no Execute. JumpE seleciona PCTargetE no mux
+    // do PC; branches continuam inativos porque ainda nao entram na expressao.
     assign PCSrcE = JumpE;
 
     // O submodulo pc implementa o registrador PCF, o somador PC+4 e o mux
@@ -238,6 +241,7 @@ module datapath (
             ResultSrcE  <= 2'b00;
             MemWriteE   <= 1'b0;
             JumpE       <= 1'b0;
+            JalrE       <= 1'b0;
             BranchE     <= 1'b0;
             ALUControlE <= 4'b0000;
             ALUSrcE     <= 1'b0;
@@ -254,6 +258,7 @@ module datapath (
             ResultSrcE  <= ResultSrcD;
             MemWriteE   <= MemWriteD;
             JumpE       <= JumpD;
+            JalrE       <= JalrD;
             BranchE     <= BranchD;
             ALUControlE <= ALUControlD;
             ALUSrcE     <= ALUSrcD;
@@ -288,8 +293,13 @@ module datapath (
     // OP-IMM continua usando ImmExtE na ALU, mesmo se ForwardBE estiver ativo.
     assign SrcBE = ALUSrcE ? ImmExtE : WriteDataE;
 
-    // JAL usa exatamente o somador PC-relative previsto no diagrama.
-    assign PCTargetE = PCE + ImmExtE;
+    // JAL e futuros branches usam o target relativo ao PC. JALR reutiliza a
+    // ALU para SrcAE+ImmExtE e o mux abaixo limpa obrigatoriamente o bit zero.
+    // Se o bit 1 resultar em 1, o futuro suporte a traps devera sinalizar o
+    // desalinhamento de instrucao do RV32I sem extensao C.
+    assign PCRelativeTargetE = PCE + ImmExtE;
+    assign PCTargetE = JalrE ? {ALUResultE[31:1], 1'b0}
+                             : PCRelativeTargetE;
 
     // A ALU agora pertence ao caminho real do pipeline. ALUControlE possui os
     // mesmos 4 bits de alu_op, sem decoder intermediario ou ajuste de largura.

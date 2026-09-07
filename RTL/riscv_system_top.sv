@@ -47,6 +47,7 @@ module riscv_system_top #(
     logic [1:0]  ResultSrcE;
     logic        MemWriteE;
     logic        JumpE;
+    logic        JalrE;
     logic        BranchE;
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
@@ -108,6 +109,7 @@ module riscv_system_top #(
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
         .JumpE        (JumpE),
+        .JalrE        (JalrE),
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
         .ALUSrcE      (ALUSrcE),

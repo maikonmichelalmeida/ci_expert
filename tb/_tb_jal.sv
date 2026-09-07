@@ -95,6 +95,8 @@ module tb_jal;
 
     task automatic check_common;
         begin
+            if ((dut.u_riscv_core.JalrD !== 1'b0) || (dut.JalrE !== 1'b0))
+                $fatal(1, "FAIL: JAL ativou o seletor exclusivo de JALR");
             if ({StallF, StallD} !== 2'b00)
                 $fatal(1, "FAIL: JAL nao deve produzir stall neste checkpoint");
             if ({FlushD, FlushE} !== {2{PCSrcE}})

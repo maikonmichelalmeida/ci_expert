@@ -10,6 +10,7 @@ module tb_control_unit;
     logic [1:0] ResultSrcD;
     logic MemWriteD;
     logic JumpD;
+    logic JalrD;
     logic BranchD;
     logic [3:0] ALUControlD;
     logic ALUSrcD;
@@ -19,7 +20,7 @@ module tb_control_unit;
     control_unit dut (
         .clk(clk), .reset(reset), .OpD(OpD), .Funct3D(Funct3D),
         .Funct7b5D(Funct7b5D), .RegWriteD(RegWriteD), .ResultSrcD(ResultSrcD),
-        .MemWriteD(MemWriteD), .JumpD(JumpD), .BranchD(BranchD),
+        .MemWriteD(MemWriteD), .JumpD(JumpD), .JalrD(JalrD), .BranchD(BranchD),
         .ALUControlD(ALUControlD), .ALUSrcD(ALUSrcD), .ImmSrcD(ImmSrcD)
     );
 
@@ -32,7 +33,7 @@ module tb_control_unit;
             if ((RegWriteD !== expected_write) ||
                 (ALUSrcD !== expected_alu_source) ||
                 (ResultSrcD !== 2'b00) || (MemWriteD !== 1'b0) ||
-                (JumpD !== 1'b0) || (BranchD !== 1'b0) ||
+                (JumpD !== 1'b0) || (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
                 (ALUControlD !== expected_alu) || (ImmSrcD !== 3'b000))
                 $fatal(1, "FAIL decoder: opcode=%b funct3=%b bit30=%b reset=%b",
                        OpD, Funct3D, Funct7b5D, reset);
@@ -80,10 +81,30 @@ module tb_control_unit;
             #1;
             if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
                 (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
+                (JalrD !== 1'b0) ||
                 (BranchD !== 1'b0) || (ALUControlD !== 4'b0000) ||
                 (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011))
                 $fatal(1, "FAIL JAL control signals");
             $display("PASS: JAL control signals");
+        end
+    endtask
+
+    task automatic check_jalr(input logic [2:0] funct3, input logic valid);
+        begin
+            OpD = 7'b1100111;
+            Funct3D = funct3;
+            Funct7b5D = 1'b1; // Este bit pertence ao imediato I em JALR.
+            #1;
+            if (valid) begin
+                if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
+                    (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
+                    (JalrD !== 1'b1) || (BranchD !== 1'b0) ||
+                    (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
+                    (ImmSrcD !== 3'b000))
+                    $fatal(1, "FAIL valid JALR control signals");
+            end else begin
+                check_control(1'b0, 1'b0, 4'b0000);
+            end
         end
     endtask
 
@@ -120,9 +141,13 @@ module tb_control_unit;
         check_op(3'b110, 1'b0, 4'b0011, "OR");
         check_op(3'b111, 1'b0, 4'b0010, "AND");
         check_jal();
+        check_jalr(3'b000, 1'b1);
+        for (integer invalid_f3 = 1; invalid_f3 < 8; invalid_f3 = invalid_f3 + 1)
+            check_jalr(invalid_f3[2:0], 1'b0);
+        $display("PASS: valid JALR and all invalid funct3 values");
 
         // Todas as 128 x 8 combinacoes de opcode/funct3, com bit 30 em 0 e 1.
-        // OP-IMM, OP e JAL sao os unicos opcodes ativos neste checkpoint.
+        // OP-IMM, OP, JAL e JALR sao os opcodes ativos neste checkpoint.
         for (integer op = 0; op < 128; op = op + 1) begin
             for (integer f3 = 0; f3 < 8; f3 = f3 + 1) begin
                 for (integer bit30 = 0; bit30 < 2; bit30 = bit30 + 1) begin
@@ -133,9 +158,21 @@ module tb_control_unit;
                     if (op == 111) begin
                         if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
                             (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
+                            (JalrD !== 1'b0) ||
                             (BranchD !== 1'b0) || (ALUControlD !== 4'b0000) ||
                             (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011))
                             $fatal(1, "FAIL exhaustive JAL decoder");
+                    end else if (op == 103) begin
+                        if (f3 == 0) begin
+                            if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
+                                (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
+                                (JalrD !== 1'b1) || (BranchD !== 1'b0) ||
+                                (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
+                                (ImmSrcD !== 3'b000))
+                                $fatal(1, "FAIL exhaustive valid JALR decoder");
+                        end else begin
+                            check_control(1'b0, 1'b0, 4'b0000);
+                        end
                     end else if (op == 19) begin
                         if ((f3 == 1) && (bit30 == 1))
                             check_control(1'b0, 1'b0, 4'b0000);
@@ -157,7 +194,7 @@ module tb_control_unit;
                 end
             end
         end
-        $display("PASS: 2048 decoder combinations for OP-IMM, OP, JAL and safe defaults");
+        $display("PASS: 2048 decoder combinations including JAL and JALR");
 
         // Reset deve apagar tambem um controle nao nulo, como SRAI=1001.
         check_op_imm(3'b101, 1'b1, 4'b1001, "SRAI before reset");

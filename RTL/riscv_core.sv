@@ -34,6 +34,7 @@ module riscv_core (
     output logic [1:0]  ResultSrcE,
     output logic        MemWriteE,
     output logic        JumpE,
+    output logic        JalrE,
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
     output logic        ALUSrcE,
@@ -45,12 +46,13 @@ module riscv_core (
     output logic [31:0] PCTargetE
 );
 
-    // Controles do estagio Decode. A control_unit ja dirige os fios definitivos,
-    // reconhecendo OP-IMM/OP e mantendo defaults seguros nos demais casos.
+    // Controles do estagio Decode. A control_unit ja reconhece OP-IMM, OP,
+    // JAL e JALR, mantendo defaults seguros nos demais casos.
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
     logic       JumpD;
+    logic       JalrD;
     logic       BranchD;
     logic [3:0] ALUControlD;
     logic       ALUSrcD;
@@ -62,8 +64,8 @@ module riscv_core (
     logic       RegWriteW;
     logic [4:0] RdW;
 
-    // ForwardAE/BE e os flushes de JAL sao funcionais nesta etapa. Os stalls
-    // permanecem neutros ate o futuro tratamento de load-use.
+    // ForwardAE/BE e os flushes de JAL/JALR sao funcionais nesta etapa. Os
+    // stalls permanecem neutros ate o futuro tratamento de load-use.
     logic       StallF;
     logic       StallD;
     logic       FlushD;
@@ -90,6 +92,7 @@ module riscv_core (
         .ResultSrcD   (ResultSrcD),
         .MemWriteD    (MemWriteD),
         .JumpD        (JumpD),
+        .JalrD        (JalrD),
         .BranchD      (BranchD),
         .ALUControlD  (ALUControlD),
         .ALUSrcD      (ALUSrcD),
@@ -128,6 +131,7 @@ module riscv_core (
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
         .JumpE        (JumpE),
+        .JalrE        (JalrE),
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
         .ALUSrcE      (ALUSrcE),
@@ -138,8 +142,8 @@ module riscv_core (
         .ZeroE        (ZeroE)
     );
 
-    // O decoder combina OpD/funct para reconhecer OP-IMM e OP. Seus controles
-    // seguem com os dados da instrucao pelos registradores de pipeline.
+    // O decoder combina OpD/funct e seus controles seguem com os dados da
+    // instrucao pelos registradores de pipeline.
     control_unit u_control_unit (
         .clk         (clk),
         .reset       (reset),
@@ -150,6 +154,7 @@ module riscv_core (
         .ResultSrcD  (ResultSrcD),
         .MemWriteD   (MemWriteD),
         .JumpD       (JumpD),
+        .JalrD       (JalrD),
         .BranchD     (BranchD),
         .ALUControlD (ALUControlD),
         .ALUSrcD     (ALUSrcD),
@@ -157,7 +162,7 @@ module riscv_core (
     );
 
     // A hazard_unit compara as fontes em E com M/W e usa PCSrcE para limpar
-    // as instrucoes mais jovens quando um JAL e resolvido no Execute.
+    // as instrucoes mais jovens quando JAL ou JALR e resolvido no Execute.
     hazard_unit u_hazard_unit (
         .clk       (clk),
         .reset     (reset),

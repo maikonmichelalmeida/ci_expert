@@ -1,4 +1,4 @@
-// Decodificacao de OP-IMM, OP e JAL do RV32I.
+// Decodificacao de OP-IMM, OP, JAL e JALR do RV32I.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -11,6 +11,7 @@ module control_unit (
     output logic [1:0] ResultSrcD,
     output logic       MemWriteD,
     output logic       JumpD,
+    output logic       JalrD,
     output logic       BranchD,
     output logic [3:0] ALUControlD,
     output logic       ALUSrcD,
@@ -24,6 +25,7 @@ module control_unit (
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
         JumpD       = 1'b0;
+        JalrD       = 1'b0;
         BranchD     = 1'b0;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
@@ -126,9 +128,21 @@ module control_unit (
                     RegWriteD  = 1'b1;
                     ResultSrcD = 2'b10;
                     JumpD      = 1'b1;
+                    JalrD      = 1'b0;
                     ALUControlD = 4'b0000;
                     ALUSrcD    = 1'b0;
                     ImmSrcD    = 3'b011;
+                end
+                7'b1100111: begin // JALR valido somente quando funct3=000.
+                    if (Funct3D == 3'b000) begin
+                        RegWriteD   = 1'b1;
+                        ResultSrcD  = 2'b10;
+                        JumpD       = 1'b1;
+                        JalrD       = 1'b1;
+                        ALUControlD = 4'b0000;
+                        ALUSrcD     = 1'b1;
+                        ImmSrcD     = 3'b000;
+                    end
                 end
                 default: begin
                     // Outros opcodes conservam os defaults sem efeitos de escrita.
@@ -141,8 +155,8 @@ module control_unit (
     // imediato -1 chega como 0xffffffff antes da comparacao unsigned.
     // Nos shifts, a ALU usa somente B[4:0]; em OP, B recebe RD2E e, em OP-IMM,
     // recebe ImmExtE. Nao precisamos de outro caminho para o shift amount.
-    // O target de JAL nao usa a ALU: PCE + ImmExtE possui um somador proprio
-    // ja previsto no datapath. A ALU recebe controles neutros nessa instrucao.
+    // JAL usa o somador PCE+ImmExtE. JALR configura a ALU como ADD para formar
+    // SrcAE+ImmExtE; JalrE escolhe depois qual desses targets alimenta o PC.
     // O decoder recebe somente InstrD[30]. Assim, reconhece as codificacoes
     // RV32I usadas aqui, mas ainda nao valida todos os sete bits de funct7,
     // nao implementa a extensao M e nao gera trap de instrucao ilegal.
