@@ -299,8 +299,8 @@ module datapath (
             RegWriteW  <= RegWriteM;
             ResultSrcW <= ResultSrcM;
             ALUResultW <= ALUResultM;
-            // Captura a saida atual da DMEM sem mudar seu timing. Para OP-IMM
-            // ela nao e usada; esta conexao, sozinha, ainda nao executa LOAD.
+            // Captura a saida atual da DMEM sem mudar seu timing. Para OP e
+            // OP-IMM ela nao e usada; esta conexao ainda nao executa LOAD.
             ReadDataW  <= ReadDataM;
             RdW        <= RdM;
             PCPlus4W   <= PCPlus4M;
@@ -308,7 +308,7 @@ module datapath (
     end
 
     // Mux final do diagrama: 00 retorna a ALU, 01 a memoria e 10 o PC+4.
-    // Apenas 00 e escolhido pelo decoder OP-IMM. As outras fontes ficam
+    // Apenas 00 e escolhido pelo decoder OP/OP-IMM. As outras fontes ficam
     // preparadas estruturalmente; 11 (reservado) devolve zero.
     always_comb begin
         ResultW = 32'b0;

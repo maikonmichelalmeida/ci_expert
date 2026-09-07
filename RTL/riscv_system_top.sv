@@ -119,7 +119,7 @@ module riscv_system_top #(
         .PCTargetE    (PCTargetE)
     );
 
-    // Endereco e dado ja vem do EX/MEM. MemWriteM e zero para ADDI e ainda
+    // Endereco e dado ja vem do EX/MEM. MemWriteM e zero para OP/OP-IMM e ainda
     // nao gera strobes: en/wstrb continuam inativos ate existir a futura LSU.
     // ReadDataM segue ao MEM/WB, mas LOAD exigira tratar a latencia sincrona.
     data_memory u_data_memory (

@@ -25,10 +25,12 @@ module tb_control_unit;
 
     task automatic check_control (
         input logic expected_write,
+        input logic expected_alu_source,
         input logic [3:0] expected_alu
     );
         begin
-            if ((RegWriteD !== expected_write) || (ALUSrcD !== expected_write) ||
+            if ((RegWriteD !== expected_write) ||
+                (ALUSrcD !== expected_alu_source) ||
                 (ResultSrcD !== 2'b00) || (MemWriteD !== 1'b0) ||
                 (JumpD !== 1'b0) || (BranchD !== 1'b0) ||
                 (ALUControlD !== expected_alu) || (ImmSrcD !== 3'b000))
@@ -37,7 +39,7 @@ module tb_control_unit;
         end
     endtask
 
-    task automatic check_instruction (
+    task automatic check_op_imm (
         input logic [2:0] funct3,
         input logic bit30,
         input logic [3:0] expected_alu,
@@ -48,7 +50,23 @@ module tb_control_unit;
             Funct3D = funct3;
             Funct7b5D = bit30;
             #1;
-            check_control(1'b1, expected_alu);
+            check_control(1'b1, 1'b1, expected_alu);
+            $display("PASS: %s control signals", name);
+        end
+    endtask
+
+    task automatic check_op (
+        input logic [2:0] funct3,
+        input logic bit30,
+        input logic [3:0] expected_alu,
+        input string name
+    );
+        begin
+            OpD = 7'b0110011;
+            Funct3D = funct3;
+            Funct7b5D = bit30;
+            #1;
+            check_control(1'b1, 1'b0, expected_alu);
             $display("PASS: %s control signals", name);
         end
     endtask
@@ -65,18 +83,29 @@ module tb_control_unit;
         expected_operation[6] = 4'b0011; // OR
         expected_operation[7] = 4'b0010; // AND
 
-        check_instruction(3'b000, 1'b0, 4'b0000, "ADDI");
-        check_instruction(3'b001, 1'b0, 4'b0111, "SLLI");
-        check_instruction(3'b010, 1'b0, 4'b0101, "SLTI");
-        check_instruction(3'b011, 1'b0, 4'b0110, "SLTIU");
-        check_instruction(3'b100, 1'b0, 4'b0100, "XORI");
-        check_instruction(3'b101, 1'b0, 4'b1000, "SRLI");
-        check_instruction(3'b101, 1'b1, 4'b1001, "SRAI");
-        check_instruction(3'b110, 1'b0, 4'b0011, "ORI");
-        check_instruction(3'b111, 1'b0, 4'b0010, "ANDI");
+        check_op_imm(3'b000, 1'b0, 4'b0000, "ADDI");
+        check_op_imm(3'b001, 1'b0, 4'b0111, "SLLI");
+        check_op_imm(3'b010, 1'b0, 4'b0101, "SLTI");
+        check_op_imm(3'b011, 1'b0, 4'b0110, "SLTIU");
+        check_op_imm(3'b100, 1'b0, 4'b0100, "XORI");
+        check_op_imm(3'b101, 1'b0, 4'b1000, "SRLI");
+        check_op_imm(3'b101, 1'b1, 4'b1001, "SRAI");
+        check_op_imm(3'b110, 1'b0, 4'b0011, "ORI");
+        check_op_imm(3'b111, 1'b0, 4'b0010, "ANDI");
+
+        check_op(3'b000, 1'b0, 4'b0000, "ADD");
+        check_op(3'b000, 1'b1, 4'b0001, "SUB");
+        check_op(3'b001, 1'b0, 4'b0111, "SLL");
+        check_op(3'b010, 1'b0, 4'b0101, "SLT");
+        check_op(3'b011, 1'b0, 4'b0110, "SLTU");
+        check_op(3'b100, 1'b0, 4'b0100, "XOR");
+        check_op(3'b101, 1'b0, 4'b1000, "SRL");
+        check_op(3'b101, 1'b1, 4'b1001, "SRA");
+        check_op(3'b110, 1'b0, 4'b0011, "OR");
+        check_op(3'b111, 1'b0, 4'b0010, "AND");
 
         // Todas as 128 x 8 combinacoes de opcode/funct3, com bit 30 em 0 e 1.
-        // Fora de OP-IMM (opcode decimal 19), nenhum caso habilita escrita.
+        // OP-IMM e OP sao os unicos opcodes ativos neste checkpoint.
         for (integer op = 0; op < 128; op = op + 1) begin
             for (integer f3 = 0; f3 < 8; f3 = f3 + 1) begin
                 for (integer bit30 = 0; bit30 < 2; bit30 = bit30 + 1) begin
@@ -84,45 +113,57 @@ module tb_control_unit;
                     Funct3D = f3[2:0];
                     Funct7b5D = bit30[0];
                     #1;
-                    if ((op != 19) || ((f3 == 1) && (bit30 == 1)))
-                        check_control(1'b0, 4'b0000);
-                    else if ((f3 == 5) && (bit30 == 1))
-                        check_control(1'b1, 4'b1001);
-                    else
-                        check_control(1'b1, expected_operation[f3]);
+                    if (op == 19) begin
+                        if ((f3 == 1) && (bit30 == 1))
+                            check_control(1'b0, 1'b0, 4'b0000);
+                        else if ((f3 == 5) && (bit30 == 1))
+                            check_control(1'b1, 1'b1, 4'b1001);
+                        else
+                            check_control(1'b1, 1'b1, expected_operation[f3]);
+                    end else if (op == 51) begin
+                        if (((f3 == 0) || (f3 == 5)) && (bit30 == 1))
+                            check_control(1'b1, 1'b0,
+                                          (f3 == 0) ? 4'b0001 : 4'b1001);
+                        else if (bit30 == 0)
+                            check_control(1'b1, 1'b0, expected_operation[f3]);
+                        else
+                            check_control(1'b0, 1'b0, 4'b0000);
+                    end else begin
+                        check_control(1'b0, 1'b0, 4'b0000);
+                    end
                 end
             end
         end
-        $display("PASS: 2048 decoder combinations, including rejected SLLI bit30=1");
+        $display("PASS: 2048 decoder combinations for OP-IMM, OP and safe defaults");
 
         // Reset deve apagar tambem um controle nao nulo, como SRAI=1001.
-        check_instruction(3'b101, 1'b1, 4'b1001, "SRAI before reset");
+        check_op_imm(3'b101, 1'b1, 4'b1001, "SRAI before reset");
         reset = 1'b1;
         #1;
-        check_control(1'b0, 4'b0000);
+        check_control(1'b0, 1'b0, 4'b0000);
         reset = 1'b0;
         #1;
-        check_control(1'b1, 4'b1001);
-        // OP registrador-registrador ainda nao e suportado. A troca deve
-        // retirar RegWriteD e o antigo ALUControlD sem esperar nenhum clock.
-        OpD = 7'b0110011;
+        check_control(1'b1, 1'b1, 4'b1001);
+        // A troca de uma instrucao valida para opcode invalido deve retirar
+        // imediatamente os enables e o ALUControlD anterior.
+        OpD = 7'b1111111;
         #1;
-        check_control(1'b0, 4'b0000);
+        check_control(1'b0, 1'b0, 4'b0000);
         $display("PASS: decoder reset and safe defaults after a valid instruction");
 
 `ifndef VERILATOR
         // Verificacao de quatro estados: X/Z em campos de selecao nao podem
         // reaproveitar o enable anterior. Verilator simula dados com dois estados.
-        check_instruction(3'b101, 1'b0, 4'b1000, "SRLI before unknown bit30");
+        check_op(3'b101, 1'b0, 4'b1000, "SRL before unknown bit30");
         Funct7b5D = 1'bx;
         #1;
-        check_control(1'b0, 4'b0000);
+        check_control(1'b0, 1'b0, 4'b0000);
         Funct3D = 3'bxxx;
         #1;
-        check_control(1'b0, 4'b0000);
+        check_control(1'b0, 1'b0, 4'b0000);
         OpD = 7'bzzzzzzz;
         #1;
-        check_control(1'b0, 4'b0000);
+        check_control(1'b0, 1'b0, 4'b0000);
         $display("PASS: unknown control fields keep safe defaults");
 `endif
         $finish;

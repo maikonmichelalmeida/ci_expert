@@ -1,4 +1,4 @@
-// Decodificacao da familia OP-IMM do RV32I usando as operacoes da ALU atual.
+// Decodificacao das familias OP-IMM e OP do RV32I usando a ALU atual.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -65,6 +65,63 @@ module control_unit (
                         end
                     endcase
                 end
+                7'b0110011: begin // OP: rs1 e rs2 -> ALU -> WB.
+                    RegWriteD = 1'b1;
+                    ALUSrcD   = 1'b0;
+                    case (Funct3D)
+                        3'b000: begin
+                            case (Funct7b5D)
+                                1'b0: ALUControlD = 4'b0000; // ADD
+                                1'b1: ALUControlD = 4'b0001; // SUB
+                                default: RegWriteD = 1'b0;
+                            endcase
+                        end
+                        3'b001: begin // SLL da base RV32I exige bit 30 igual a zero.
+                            if (Funct7b5D == 1'b0)
+                                ALUControlD = 4'b0111;
+                            else
+                                RegWriteD = 1'b0;
+                        end
+                        3'b010: begin // SLT, comparacao signed.
+                            if (Funct7b5D == 1'b0)
+                                ALUControlD = 4'b0101;
+                            else
+                                RegWriteD = 1'b0;
+                        end
+                        3'b011: begin // SLTU, comparacao unsigned.
+                            if (Funct7b5D == 1'b0)
+                                ALUControlD = 4'b0110;
+                            else
+                                RegWriteD = 1'b0;
+                        end
+                        3'b100: begin // XOR.
+                            if (Funct7b5D == 1'b0)
+                                ALUControlD = 4'b0100;
+                            else
+                                RegWriteD = 1'b0;
+                        end
+                        3'b101: begin
+                            case (Funct7b5D)
+                                1'b0: ALUControlD = 4'b1000; // SRL
+                                1'b1: ALUControlD = 4'b1001; // SRA
+                                default: RegWriteD = 1'b0;
+                            endcase
+                        end
+                        3'b110: begin // OR.
+                            if (Funct7b5D == 1'b0)
+                                ALUControlD = 4'b0011;
+                            else
+                                RegWriteD = 1'b0;
+                        end
+                        3'b111: begin // AND.
+                            if (Funct7b5D == 1'b0)
+                                ALUControlD = 4'b0010;
+                            else
+                                RegWriteD = 1'b0;
+                        end
+                        default: RegWriteD = 1'b0;
+                    endcase
+                end
                 default: begin
                     // Outros opcodes conservam os defaults sem efeitos de escrita.
                 end
@@ -74,9 +131,11 @@ module control_unit (
 
     // O Extend continua fazendo extensao de sinal inclusive em SLTIU:
     // imediato -1 chega como 0xffffffff antes da comparacao unsigned.
-    // Nos shifts, a ALU usa somente B[4:0]; nao precisamos de outro caminho.
-    // Validamos apenas o bit 30 disponivel para os shifts. Os outros bits
-    // superiores reservados ainda nao sao validados, e nao existe trap ilegal.
+    // Nos shifts, a ALU usa somente B[4:0]; em OP, B recebe RD2E e, em OP-IMM,
+    // recebe ImmExtE. Nao precisamos de outro caminho para o shift amount.
+    // O decoder recebe somente InstrD[30]. Assim, reconhece as codificacoes
+    // RV32I usadas aqui, mas ainda nao valida todos os sete bits de funct7,
+    // nao implementa a extensao M e nao gera trap de instrucao ilegal.
 
     // clk permanece na interface existente. O controle e combinacional,
     // sem estado interno; reset apenas mantem os comandos inativos.
