@@ -29,8 +29,11 @@ GIT_BRANCH ?= main
 TEST_NAMES := $(sort $(patsubst filelist_%.f,%,$(notdir $(wildcard $(RUN_DIR)/filelist_*.f))))
 
 .PHONY: menu help tests show-config status update load check-filelist \
-        compile rebuild run regression log complog verdi clean
+        compile rebuild run regression log complog verdi clean \
+        _compile _rebuild _run _regression _verdi
 
+# Os alvos publicos sincronizam o Git. O menu e a regressao usam os alvos com
+# prefixo "_" porque a sincronizacao ja foi feita no inicio do comando.
 menu: update
 > @while true; do \
 >   clear; \
@@ -52,7 +55,7 @@ menu: update
 >   if ! read -r -p "Escolha [1-10]: " option; then echo; break; fi; \
 >   option="$${option%$$'\r'}"; \
 >   case "$$option" in \
->     1) $(MAKE) --no-print-directory run TEST="$(TEST)";; \
+>     1) $(MAKE) --no-print-directory _run TEST="$(TEST)";; \
 >     2) \
 >       tests=($(TEST_NAMES)); \
 >       echo; \
@@ -62,15 +65,15 @@ menu: update
 >       choice="$${choice%$$'\r'}"; \
 >       if [[ "$$choice" =~ ^[0-9]+$$ ]] && (( choice >= 1 && choice <= $${#tests[@]} )); then \
 >         selected="$${tests[$$((choice - 1))]}"; \
->         $(MAKE) --no-print-directory run TEST="$$selected"; \
+>         $(MAKE) --no-print-directory _run TEST="$$selected"; \
 >       else \
 >         echo "Escolha invalida."; \
 >       fi;; \
->     3) $(MAKE) --no-print-directory verdi TEST="$(TEST)";; \
+>     3) $(MAKE) --no-print-directory _verdi TEST="$(TEST)";; \
 >     4) $(MAKE) --no-print-directory log TEST="$(TEST)";; \
->     5) $(MAKE) --no-print-directory rebuild TEST="$(TEST)";; \
+>     5) $(MAKE) --no-print-directory _rebuild TEST="$(TEST)";; \
 >     6) $(MAKE) --no-print-directory tests;; \
->     7) $(MAKE) --no-print-directory regression;; \
+>     7) $(MAKE) --no-print-directory _regression;; \
 >     8) $(MAKE) --no-print-directory status;; \
 >     9) $(MAKE) --no-print-directory update;; \
 >    10) break;; \
@@ -127,7 +130,7 @@ update:
 > git -C "$(ROOT)" pull --ff-only "$(GIT_REMOTE)" "$(GIT_BRANCH)"
 
 load:
-> @bash -lc 'set -e; $(VERDI_ENV); command -v $(VCS_BIN); command -v $(VERDI_BIN); $(VCS_BIN) -ID; $(VERDI_BIN) -version'
+> @bash -lc 'set -e; $(VERDI_ENV); command -v $(VCS_BIN); command -v $(VERDI_BIN); $(VCS_BIN) -ID'
 
 check-filelist:
 > @if [ ! -f "$(RUN_DIR)/$(FILELIST)" ]; then \
@@ -136,25 +139,33 @@ check-filelist:
 >   exit 1; \
 > fi
 
-compile: update check-filelist
+compile: update _compile
+
+_compile: check-filelist
 > @echo "Compilando o teste $(if $(strip $(TEST)),$(TEST),default) com $(FILELIST)..."
 > @cd "$(RUN_DIR)" && bash -lc 'set -e; $(VCS_ENV); command -v $(VCS_BIN) >/dev/null || { echo "Erro: $(VCS_BIN) nao foi encontrado."; exit 1; }; $(VCS_BIN) $(VCS_FLAGS)'
 
-rebuild: clean compile
+rebuild: update _rebuild
 
-run: compile
+_rebuild: clean _compile
+
+run: update _run
+
+_run: _compile
 > @echo "Executando a simulacao; log em RUN/$(SIM_LOG)..."
 > @cd "$(RUN_DIR)" && bash -lc 'set -o pipefail; $(VCS_ENV); ./simv | tee "$(SIM_LOG)"; exit $${PIPESTATUS[0]}'
 
 # Executa primeiro a integracao default e depois cada filelist_<teste>.f.
 # O primeiro erro interrompe a regressao e preserva o log que explica a falha.
-regression:
+regression: update _regression
+
+_regression:
 > @set -e; \
 > echo "===== teste default ====="; \
-> $(MAKE) --no-print-directory run TEST= FILELIST=filelist.f COMP_LOG=comp.log SIM_LOG=sim.log FSDB=test.fsdb; \
+> $(MAKE) --no-print-directory _run TEST= FILELIST=filelist.f COMP_LOG=comp.log SIM_LOG=sim.log FSDB=test.fsdb; \
 > for test in $(TEST_NAMES); do \
 >   echo "===== teste $$test ====="; \
->   $(MAKE) --no-print-directory run TEST="$$test"; \
+>   $(MAKE) --no-print-directory _run TEST="$$test"; \
 > done; \
 > echo "===== regressao concluida com sucesso ====="
 
@@ -172,10 +183,12 @@ complog:
 > fi
 > @less -R "$(RUN_DIR)/$(COMP_LOG)"
 
-verdi: check-filelist
+verdi: update _verdi
+
+_verdi: check-filelist
 > @if [ ! -f "$(RUN_DIR)/$(FSDB)" ] || [ ! -d "$(RUN_DIR)/simv.daidir" ]; then \
 >   echo "Waveform ausente; executando a simulacao primeiro..."; \
->   $(MAKE) --no-print-directory run TEST="$(TEST)" FILELIST="$(FILELIST)" \
+>   $(MAKE) --no-print-directory _run TEST="$(TEST)" FILELIST="$(FILELIST)" \
 >     COMP_LOG="$(COMP_LOG)" SIM_LOG="$(SIM_LOG)" FSDB="$(FSDB)"; \
 > fi
 > @cd "$(RUN_DIR)" && bash -lc 'set -e; $(VERDI_ENV); command -v $(VERDI_BIN) >/dev/null || { echo "Erro: $(VERDI_BIN) nao foi encontrado."; exit 1; }; exec $(VERDI_BIN) -dbdir simv.daidir -ssf "$(FSDB)"' >/dev/null 2>&1 &
@@ -185,7 +198,7 @@ verdi: check-filelist
 clean:
 > @echo "Removendo produtos de compilacao e formas de onda de RUN/..."
 > @rm -rf "$(RUN_DIR)/simv" \
->          "$(RUN_DIR)/simv.daidir" \
+>          "$(RUN_DIR)"/simv*.daidir \
 >          "$(RUN_DIR)/csrc" \
 >          "$(RUN_DIR)/ucli.key" \
 >          "$(RUN_DIR)/verdiLog" \

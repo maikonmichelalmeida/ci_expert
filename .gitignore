@@ -1,6 +1,6 @@
 # VCS / Verdi
 simv
-simv.daidir/
+simv*.daidir/
 csrc/
 ucli.key
 *.vpd
@@ -10,6 +10,7 @@ verdiLog/
 novas.*
 AN.DB/
 DVEfiles/
+.nfs*
 
 # Synopsys synthesis / work products
 *.ddc
