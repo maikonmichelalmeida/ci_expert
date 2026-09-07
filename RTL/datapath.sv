@@ -120,6 +120,12 @@ module datapath (
     // ---------------- Estagio Writeback (W) ----------------
     logic [31:0] ResultW;
 
+    // ---------------- Leituras brutas do Register File em Decode ----------------
+    // O banco dirige somente estes fios internos. RD1D/RD2D recebem depois a
+    // leitura bruta ou ResultW pelo bypass local, mantendo um unico driver.
+    logic [31:0] RFRead1D;
+    logic [31:0] RFRead2D;
+
     // Sinais ao redor do PC no diagrama: PCSrcE controla o mux, PCTargetE sera
     // o endereco alternativo e StallF sera o enable invertido do registrador PC.
     logic [31:0] PCNextF;
@@ -184,7 +190,7 @@ module datapath (
     );
 
     // A leitura vem da instrucao real: Rs1D e Rs2D escolhem os dois
-    // registradores, e seus conteudos aparecem no diagrama como RD1D e RD2D.
+    // registradores, e o banco entrega aqui os valores brutos RFRead1D/2D.
     // O unico escritor agora e o WB: destino RdW e dado ResultW.
     // O bloqueio por reset impede gravar um WB pendente no proprio flanco
     // que limpa o pipeline, antes das atribuicoes nao bloqueantes atualizarem W.
@@ -195,9 +201,26 @@ module datapath (
         .rd_addr  (RdW),
         .rd_data  (ResultW),
         .rd_we    (RegWriteW && !reset),
-        .rs1_data (RD1D),
-        .rs2_data (RD2D)
+        .rs1_data (RFRead1D),
+        .rs2_data (RFRead2D)
     );
+
+    // Bypass WB -> Decode. E como se existisse um pequeno mux depois de cada
+    // porta de leitura: quando WB grava o mesmo registrador lido em Decode,
+    // ResultW vence a leitura bruta antes que o ID/EX capture o operando.
+    // Isso resolve a janela produtor em WB / consumidor em ID sem mudar o
+    // posedge do Register File e sem substituir o forwarding M/W -> Execute.
+    always_comb begin
+        RD1D = RFRead1D;
+        RD2D = RFRead2D;
+
+        if (!reset && RegWriteW && (RdW != 5'd0)) begin
+            if (RdW == Rs1D)
+                RD1D = ResultW;
+            if (RdW == Rs2D)
+                RD2D = ResultW;
+        end
+    end
 
     always_ff @(posedge clk) begin
         // Reset ou FlushE insere uma bolha segura no Execute. Todos os enables
@@ -239,6 +262,8 @@ module datapath (
 
     // Os muxes escolhem o valor original (00), o WB (01) ou o resultado mais
     // recente no EX/MEM (10). O codigo 11 e reservado e volta ao valor original.
+    // EX/MEM ainda oferece ALUResultM; produtores nao-ALU nesse estagio serao
+    // tratados quando as demais fontes de resultado entrarem no forwarding.
     always_comb begin
         SrcAE = RD1E;
         case (ForwardAE)

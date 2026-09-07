@@ -1,13 +1,25 @@
 `timescale 1ns/1ps
 
-// Testa JAL pelo sistema completo: busca na IMEM, redirect em Execute,
-// flush das instrucoes erradas e escrita de PC+4 pelo Writeback real.
+// Fecha o JAL no core atual: offset positivo e negativo, link por PC+4,
+// consumidor imediato no alvo, JAL x0, redirect e descarte do caminho errado.
+// Todos os targets executados sao multiplos de 4. Exceptions por endereco de
+// instrucao desalinhado permanecem reservadas para uma etapa futura.
 module tb_jal;
-    localparam integer PROGRAM_WORDS = 13;
+    localparam integer PROGRAM_WORDS = 22;
 
     logic clk;
     logic reset;
     logic [31:0] expected_program [0:PROGRAM_WORDS-1];
+    logic [31:0] isolated_instruction;
+    logic [2:0]  isolated_imm_src;
+    logic [31:0] isolated_imm;
+    integer redirect_count;
+    integer jal_x0_wb_count;
+    logic saw_positive_wb_id;
+    logic saw_positive_consumer;
+    logic saw_negative_execute;
+    logic saw_negative_link;
+    logic saw_final_forwarding;
 
     wire        PCSrcE     = dut.u_riscv_core.PCSrcE;
     wire        StallF     = dut.u_riscv_core.StallF;
@@ -20,12 +32,22 @@ module tb_jal;
     wire [1:0]  ResultSrcW = dut.u_riscv_core.u_datapath.ResultSrcW;
     wire [4:0]  RdW        = dut.u_riscv_core.u_datapath.RdW;
     wire [31:0] ResultW     = dut.u_riscv_core.u_datapath.ResultW;
+    wire [31:0] RFRead1D   = dut.u_riscv_core.u_datapath.RFRead1D;
+    wire [31:0] RFRead2D   = dut.u_riscv_core.u_datapath.RFRead2D;
 
     riscv_system_top #(
         .IMEM_INIT_FILE ("../mem/jal.hex")
     ) dut (
         .clk   (clk),
         .reset (reset)
+    );
+
+    // Instancia isolada apenas para conferir os limites do formato J. O fluxo
+    // end-to-end abaixo continua usando o extend que pertence ao datapath.
+    extend u_isolated_extend (
+        .InstrD  (isolated_instruction[31:7]),
+        .ImmSrcD (isolated_imm_src),
+        .ImmExtD (isolated_imm)
     );
 
     initial begin
@@ -42,59 +64,94 @@ module tb_jal;
     endfunction
 
     function automatic logic [31:0] encode_jal(
-        input logic [20:0] offset,
+        input integer offset,
         input logic [4:0] rd
     );
-        // O imediato J espalha seus bits pela instrucao. O bit zero nao e
-        // armazenado porque o deslocamento sempre representa multiplo de 2.
-        encode_jal = {offset[20], offset[10:1], offset[11],
-                      offset[19:12], rd, 7'b1101111};
+        logic [20:0] offset_bits;
+        begin
+            // O recorte para 21 bits conserva a representacao em complemento
+            // de dois dos offsets negativos antes de distribuir o formato J.
+            offset_bits = offset[20:0];
+            encode_jal = {offset_bits[20], offset_bits[10:1], offset_bits[11],
+                          offset_bits[19:12], rd, 7'b1101111};
+        end
     endfunction
 
-    task automatic advance_cycle;
+    task automatic check_isolated_j_imm(
+        input integer offset,
+        input logic [31:0] expected,
+        input string name
+    );
         begin
-            @(posedge clk);
+            isolated_instruction = encode_jal(offset, 5'd1);
+            isolated_imm_src = 3'b011;
             #1;
-            if ({StallF, StallD} !== 2'b00)
-                $fatal(1, "FAIL: JAL nao deve produzir stall nesta etapa");
-            if ({FlushD, FlushE} !== {2{PCSrcE}})
-                $fatal(1, "FAIL: flushes nao acompanham PCSrcE");
-            if ((ForwardAE === 2'b11) || (ForwardBE === 2'b11))
-                $fatal(1, "FAIL: codigo 11 de forwarding foi utilizado");
-            if ((dut.MemWriteM !== 1'b0) || (dut.u_data_memory.en !== 1'b0) ||
-                (dut.u_data_memory.wstrb !== 4'b0000))
-                $fatal(1, "FAIL: JAL ativou indevidamente a DMEM");
+            if (isolated_imm !== expected)
+                $fatal(1, "FAIL %s: ImmExt=%h expected=%h",
+                       name, isolated_imm, expected);
+            $display("PASS: %s -> %h", name, isolated_imm);
         end
     endtask
 
-    // Uma instrucao do caminho errado jamais pode chegar ao WB com escrita.
-    // O teste apenas le sinais internos; nao cria outro driver no RTL.
-    always @(posedge clk) begin
-        if (!reset && RegWriteW &&
-            ((RdW == 5'd20) || (RdW == 5'd21) || (RdW == 5'd22) ||
-             (RdW == 5'd23) || (RdW == 5'd24)))
-            $fatal(1, "FAIL: instrucao do caminho errado tentou escrever x%0d", RdW);
-    end
+    task automatic check_common;
+        begin
+            if ({StallF, StallD} !== 2'b00)
+                $fatal(1, "FAIL: JAL nao deve produzir stall neste checkpoint");
+            if ({FlushD, FlushE} !== {2{PCSrcE}})
+                $fatal(1, "FAIL: FlushD/FlushE nao acompanham PCSrcE");
+            if ((ForwardAE === 2'b11) || (ForwardBE === 2'b11))
+                $fatal(1, "FAIL: forwarding produziu o codigo reservado 11");
+            if ((dut.MemWriteM !== 1'b0) || (dut.u_data_memory.en !== 1'b0) ||
+                (dut.u_data_memory.wstrb !== 4'b0000))
+                $fatal(1, "FAIL: acesso inesperado a DMEM");
+
+            // x20..x31 aparecem somente no caminho errado deste programa.
+            // Detectar RegWriteW e mais forte do que confiar no valor final.
+            if (RegWriteW && (RdW >= 5'd20))
+                $fatal(1, "FAIL: instrucao wrong-path chegou ao WB para x%0d", RdW);
+        end
+    endtask
 
     initial begin
         reset = 1'b1;
+        redirect_count = 0;
+        jal_x0_wb_count = 0;
+        saw_positive_wb_id = 1'b0;
+        saw_positive_consumer = 1'b0;
+        saw_negative_execute = 1'b0;
+        saw_negative_link = 1'b0;
+        saw_final_forwarding = 1'b0;
+        isolated_instruction = 32'b0;
+        isolated_imm_src = 3'b011;
 
-        // O alvo do primeiro JAL nao usa x10 imediatamente. O forwarding atual
-        // em EX/MEM encaminha ALUResultM; encaminhar PC+4 de JAL sera tratado
-        // quando os produtores nao-ALU forem integrados ao forwarding completo.
-        expected_program[0]  = encode_addi(12'd5,   5'd0, 5'd5);
-        expected_program[1]  = encode_jal(21'd16,  5'd10);
-        expected_program[2]  = encode_addi(12'd111, 5'd0, 5'd20);
-        expected_program[3]  = encode_addi(12'd222, 5'd0, 5'd21);
-        expected_program[4]  = encode_addi(12'd333, 5'd0, 5'd24);
-        expected_program[5]  = encode_addi(12'd9,   5'd0, 5'd6);
-        expected_program[6]  = encode_addi(12'd1,   5'd6, 5'd7);
-        expected_program[7]  = encode_jal(21'd16,  5'd0);
-        expected_program[8]  = encode_addi(12'd55,  5'd0, 5'd22);
-        expected_program[9]  = encode_addi(12'd66,  5'd0, 5'd23);
-        expected_program[10] = encode_addi(12'd77,  5'd0, 5'd24);
-        expected_program[11] = encode_addi(12'd11,  5'd0, 5'd8);
-        expected_program[12] = encode_addi(12'd1,   5'd8, 5'd9);
+        // Casos independentes: pequenos offsets e os dois extremos assinados.
+        check_isolated_j_imm(16,       32'h0000_0010, "J +16");
+        check_isolated_j_imm(-12,      32'hffff_fff4, "J -12");
+        check_isolated_j_imm(1048574,  32'h000f_fffe, "J maximum positive");
+        check_isolated_j_imm(-1048576, 32'hfff0_0000, "J maximum negative");
+
+        expected_program[0]  = encode_addi(12'd5,   5'd0,  5'd5);
+        expected_program[1]  = encode_jal(16,  5'd10);
+        expected_program[2]  = encode_addi(12'd111, 5'd0,  5'd20);
+        expected_program[3]  = encode_addi(12'd222, 5'd0,  5'd21);
+        expected_program[4]  = encode_addi(12'd333, 5'd0,  5'd22);
+        expected_program[5]  = encode_addi(12'd1,   5'd10, 5'd11);
+        expected_program[6]  = encode_jal(16,  5'd0);
+        expected_program[7]  = encode_addi(12'd55,  5'd0,  5'd23);
+        expected_program[8]  = encode_addi(12'd66,  5'd0,  5'd24);
+        expected_program[9]  = encode_addi(12'd77,  5'd0,  5'd25);
+        expected_program[10] = encode_jal(24,  5'd0);
+        expected_program[11] = encode_addi(12'd88,  5'd0,  5'd26);
+        expected_program[12] = encode_addi(12'd99,  5'd0,  5'd27);
+        expected_program[13] = encode_addi(12'd7,   5'd0,  5'd7);
+        expected_program[14] = encode_jal(24,  5'd0);
+        expected_program[15] = encode_addi(12'd110, 5'd0,  5'd28);
+        expected_program[16] = encode_jal(-12, 5'd6);
+        expected_program[17] = encode_addi(12'd121, 5'd0,  5'd29);
+        expected_program[18] = encode_addi(12'd122, 5'd0,  5'd30);
+        expected_program[19] = encode_addi(12'd123, 5'd0,  5'd31);
+        expected_program[20] = encode_addi(12'd1,   5'd6,  5'd8);
+        expected_program[21] = encode_addi(12'd1,   5'd8,  5'd9);
 
         #1;
         for (integer i = 0; i < PROGRAM_WORDS; i = i + 1) begin
@@ -102,138 +159,135 @@ module tb_jal;
                 $fatal(1, "FAIL encoding word %0d: hex=%h expected=%h",
                        i, dut.u_instruction_memory.mem[i], expected_program[i]);
         end
-        $display("PASS: JAL and ADDI encodings checked independently");
-
-        // A cauda recebe NOPs apenas para permitir o esvaziamento do pipeline.
         for (integer i = PROGRAM_WORDS; i < 512; i = i + 1)
             dut.u_instruction_memory.mem[i] = 32'h0000_0013;
+        $display("PASS: complete JAL program encoding checked independently");
 
-        advance_cycle();
-        if ((dut.PCF !== 32'b0) || (dut.InstrD !== 32'b0))
+        @(posedge clk);
+        #1;
+        if ((dut.PCF !== 32'b0) || (RegWriteW !== 1'b0))
             $fatal(1, "FAIL reset state");
 
         @(negedge clk);
         reset = 1'b0;
-        if ((dut.PCF !== 32'd0) || (dut.InstrF !== expected_program[0]))
-            $fatal(1, "FAIL first Fetch");
 
-        // C1: addi x5 entra em Decode.
-        advance_cycle();
-        if ((dut.PCF !== 32'd4) || (dut.InstrD !== expected_program[0]))
-            $fatal(1, "FAIL cycle 1");
+        for (integer cycle = 1; cycle <= 50; cycle = cycle + 1) begin
+            @(posedge clk);
+            #1;
+            check_common();
 
-        // C2: JAL esta em Decode e deve produzir todos os controles pedidos.
-        advance_cycle();
-        if ((dut.PCF !== 32'd8) || (dut.InstrD !== expected_program[1]) ||
-            (dut.PCD !== 32'd4) || (dut.PCPlus4D !== 32'd8) ||
-            (dut.ImmExtD !== 32'd16) ||
-            (dut.u_riscv_core.RegWriteD !== 1'b1) ||
-            (dut.u_riscv_core.ResultSrcD !== 2'b10) ||
-            (dut.u_riscv_core.MemWriteD !== 1'b0) ||
-            (dut.u_riscv_core.JumpD !== 1'b1) ||
-            (dut.u_riscv_core.BranchD !== 1'b0) ||
-            (dut.u_riscv_core.ImmSrcD !== 3'b011) ||
-            (dut.u_riscv_core.ALUControlD !== 4'b0000) ||
-            (dut.u_riscv_core.ALUSrcD !== 1'b0))
-            $fatal(1, "FAIL JAL Decode controls");
+            if (PCSrcE) begin
+                redirect_count = redirect_count + 1;
+                case (dut.PCE)
+                    32'd4: begin
+                        if ((dut.ImmExtE !== 32'd16) ||
+                            (dut.PCTargetE !== 32'd20) || (dut.RdE !== 5'd10) ||
+                            (dut.PCPlus4E !== 32'd8))
+                            $fatal(1, "FAIL positive JAL Execute");
+                    end
+                    32'd24: begin
+                        if ((dut.ImmExtE !== 32'd16) ||
+                            (dut.PCTargetE !== 32'd40) || (dut.RdE !== 5'd0))
+                            $fatal(1, "FAIL first JAL x0 Execute");
+                    end
+                    32'd40: begin
+                        if ((dut.ImmExtE !== 32'd24) ||
+                            (dut.PCTargetE !== 32'd64) || (dut.RdE !== 5'd0))
+                            $fatal(1, "FAIL jump to backward JAL");
+                    end
+                    32'd64: begin
+                        if ((dut.ImmExtE !== 32'hffff_fff4) ||
+                            (dut.PCTargetE !== 32'd52) || (dut.RdE !== 5'd6) ||
+                            (dut.PCPlus4E !== 32'd68))
+                            $fatal(1, "FAIL negative JAL Execute");
+                        saw_negative_execute = 1'b1;
+                        $display("PASS: JAL at PC=64 uses offset=-12 and target=52");
+                    end
+                    32'd56: begin
+                        if ((dut.ImmExtE !== 32'd24) ||
+                            (dut.PCTargetE !== 32'd80) || (dut.RdE !== 5'd0))
+                            $fatal(1, "FAIL exit from backward target");
+                    end
+                    default: $fatal(1, "FAIL unexpected redirect from PC=%0d", dut.PCE);
+                endcase
 
-        // C3: JAL chega a Execute. PCSrcE redireciona para 20 e os dois
-        // registradores mais jovens sao limpos no mesmo flanco seguinte.
-        advance_cycle();
-        if ((PCSrcE !== 1'b1) || ({FlushD, FlushE} !== 2'b11) ||
-            (dut.JumpE !== 1'b1) || (dut.PCE !== 32'd4) ||
-            (dut.ImmExtE !== 32'd16) || (dut.PCTargetE !== 32'd20) ||
-            (dut.ResultSrcE !== 2'b10) || (dut.RegWriteE !== 1'b1) ||
-            (dut.RdE !== 5'd10))
-            $fatal(1, "FAIL first JAL Execute redirect");
-        $display("PASS: first JAL asserts PCSrcE, FlushD and FlushE");
+                if ((FlushD !== 1'b1) || (FlushE !== 1'b1))
+                    $fatal(1, "FAIL redirect without both flushes");
+            end
 
-        // C4: o PC aponta para o alvo e as instrucoes erradas viraram bolhas.
-        advance_cycle();
-        if ((dut.PCF !== 32'd20) || (dut.InstrF !== expected_program[5]) ||
-            (dut.InstrD !== 32'b0) || (dut.RegWriteE !== 1'b0) ||
-            (PCSrcE !== 1'b0) || ({FlushD, FlushE} !== 2'b00) ||
-            (dut.u_riscv_core.u_datapath.RegWriteM !== 1'b1) ||
-            (dut.u_riscv_core.u_datapath.ResultSrcM !== 2'b10) ||
-            (dut.u_riscv_core.u_datapath.RdM !== 5'd10) ||
-            (dut.u_riscv_core.u_datapath.PCPlus4M !== 32'd8))
-            $fatal(1, "FAIL first JAL redirect/EX-MEM");
+            if (RegWriteW && (ResultSrcW == 2'b10)) begin
+                case (dut.u_riscv_core.u_datapath.PCPlus4W)
+                    32'd8: begin
+                        // O JAL esta em WB enquanto seu consumidor do target
+                        // esta em ID. A leitura bruta ainda nao contem o link.
+                        if ((RdW !== 5'd10) || (ResultW !== 32'd8) ||
+                            (dut.InstrD !== expected_program[5]) ||
+                            (dut.Rs1D !== 5'd10) || (dut.RD1D !== 32'd8) ||
+                            (RFRead1D === 32'd8))
+                            $fatal(1, "FAIL JAL WB -> target Decode bypass");
+                        saw_positive_wb_id = 1'b1;
+                        $display("PASS: JAL link bypasses WB directly to target Decode");
+                    end
+                    32'd68: begin
+                        if ((RdW !== 5'd6) || (ResultW !== 32'd68))
+                            $fatal(1, "FAIL negative JAL link in WB");
+                        saw_negative_link = 1'b1;
+                    end
+                    32'd28, 32'd44, 32'd60: begin
+                        if ((RdW !== 5'd0) ||
+                            (dut.RD1D !== RFRead1D) || (dut.RD2D !== RFRead2D))
+                            $fatal(1, "FAIL JAL x0 created WB-Decode bypass");
+                        jal_x0_wb_count = jal_x0_wb_count + 1;
+                    end
+                    default: $fatal(1, "FAIL unexpected JAL value in WB");
+                endcase
+            end
 
-        // C5: o mux do WB seleciona PCPlus4W=8 para o link de x10.
-        advance_cycle();
-        if ((RegWriteW !== 1'b1) || (ResultSrcW !== 2'b10) ||
-            (RdW !== 5'd10) || (ResultW !== 32'd8) ||
-            (dut.u_riscv_core.u_datapath.PCPlus4W !== 32'd8))
-            $fatal(1, "FAIL first JAL Writeback selection");
+            // O consumidor imediato chegou a EX com o dado capturado em ID.
+            // Nao existe produtor correspondente em M/W neste ciclo.
+            if (dut.PCE == 32'd20) begin
+                if ((dut.RD1E !== 32'd8) || (ForwardAE !== 2'b00) ||
+                    (dut.SrcAE !== 32'd8) || (dut.ALUResultE !== 32'd9))
+                    $fatal(1, "FAIL immediate JAL target consumer");
+                saw_positive_consumer = 1'b1;
+            end
 
-        // C6 escreve x10 no flanco real do Register File.
-        advance_cycle();
-        if (dut.u_riscv_core.u_datapath.u_register_file.regs[10] !== 32'd8)
-            $fatal(1, "FAIL JAL link was not written to x10");
-        $display("PASS: JAL writes PC+4 to x10 through MEM/WB");
+            if (dut.PCE == 32'd80) begin
+                if ((dut.SrcAE !== 32'd68) || (dut.ALUResultE !== 32'd69))
+                    $fatal(1, "FAIL negative JAL link consumer");
+            end
 
-        // C7 prova que o forwarding de uma ALU produtora continua funcionando.
-        advance_cycle();
-        if ((dut.PCF !== 32'd32) || (dut.InstrD !== expected_program[7]) ||
-            (ForwardAE !== 2'b10) || (dut.SrcAE !== 32'd9) ||
-            (dut.SrcBE !== 32'd1) || (dut.ALUResultE !== 32'd10))
-            $fatal(1, "FAIL forwarding preserved before second JAL");
+            // Confirma que o forwarding M -> EX anterior continua intacto.
+            if (dut.PCE == 32'd84) begin
+                if ((ForwardAE !== 2'b10) || (dut.SrcAE !== 32'd69) ||
+                    (dut.ALUResultE !== 32'd70))
+                    $fatal(1, "FAIL forwarding after JAL flow");
+                saw_final_forwarding = 1'b1;
+            end
+        end
 
-        // C8: JAL x0 redireciona para 44 com os mesmos flushes.
-        advance_cycle();
-        if ((PCSrcE !== 1'b1) || ({FlushD, FlushE} !== 2'b11) ||
-            (dut.PCE !== 32'd28) || (dut.PCTargetE !== 32'd44) ||
-            (dut.RdE !== 5'd0) || (dut.ResultSrcE !== 2'b10))
-            $fatal(1, "FAIL JAL x0 Execute redirect");
-
-        // C9: alvo correto; caminho errado foi novamente convertido em bolhas.
-        advance_cycle();
-        if ((dut.PCF !== 32'd44) || (dut.InstrF !== expected_program[11]) ||
-            (dut.InstrD !== 32'b0) || (dut.RegWriteE !== 1'b0) ||
-            (PCSrcE !== 1'b0))
-            $fatal(1, "FAIL second JAL target/flush");
-
-        // C10 mostra que o WB tenta escrever o link, mas com rd=x0.
-        advance_cycle();
-        if ((RegWriteW !== 1'b1) || (ResultSrcW !== 2'b10) ||
-            (RdW !== 5'd0) || (ResultW !== 32'd32) ||
-            (dut.RD1D !== 32'b0))
-            $fatal(1, "FAIL JAL x0 Writeback selection");
-
-        // C11: o Register File deve ignorar a escrita em x0. O armazenamento
-        // interno de regs[0] nao precisa ser inicializado: as portas de leitura
-        // e o bloqueio de forwarding definem o comportamento arquitetural de x0.
-        advance_cycle();
-        if ((dut.RD1E !== 32'b0) || (ForwardAE !== 2'b00))
-            $fatal(1, "FAIL x0 protection after JAL x0");
-        $display("PASS: JAL x0 redirects but cannot alter x0 or create forwarding");
-
-        // C12: o ADDI do segundo alvo usa forwarding normal de x8.
-        advance_cycle();
-        if ((ForwardAE !== 2'b10) || (dut.SrcAE !== 32'd11) ||
-            (dut.SrcBE !== 32'd1) || (dut.ALUResultE !== 32'd12))
-            $fatal(1, "FAIL forwarding preserved after second JAL");
-
-        // Esvazia os dois ultimos resultados ate o banco de registradores.
-        advance_cycle();
-        advance_cycle();
-        advance_cycle();
+        if ((redirect_count != 5) || (jal_x0_wb_count != 3) ||
+            !saw_positive_wb_id || !saw_positive_consumer ||
+            !saw_negative_execute || !saw_negative_link ||
+            !saw_final_forwarding)
+            $fatal(1, "FAIL: not all JAL checkpoints were observed");
 
         if ((dut.u_riscv_core.u_datapath.u_register_file.regs[5]  !== 32'd5) ||
-            (dut.u_riscv_core.u_datapath.u_register_file.regs[6]  !== 32'd9) ||
-            (dut.u_riscv_core.u_datapath.u_register_file.regs[7]  !== 32'd10) ||
-            (dut.u_riscv_core.u_datapath.u_register_file.regs[8]  !== 32'd11) ||
-            (dut.u_riscv_core.u_datapath.u_register_file.regs[9]  !== 32'd12) ||
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[6]  !== 32'd68) ||
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[7]  !== 32'd7) ||
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[8]  !== 32'd69) ||
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[9]  !== 32'd70) ||
             (dut.u_riscv_core.u_datapath.u_register_file.regs[10] !== 32'd8) ||
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[11] !== 32'd9) ||
             (dut.RD1D !== 32'b0) || (dut.RD2D !== 32'b0))
             $fatal(1, "FAIL final architectural register values");
 
-        $display("PASS: forward JAL, JAL x0, wrong-path flush and existing forwarding");
+        $display("PASS: JAL positive/negative, x0, WB-ID bypass, flush and forwarding");
         $finish;
     end
 
     initial begin
-        #1000;
+        #2000;
         $fatal(1, "FAIL: JAL test timeout");
     end
 endmodule
