@@ -1,5 +1,5 @@
 // Detector de dependencias do pipeline.
-// Forwarding e flush de redirects sao funcionais; os stalls continuam inativos.
+// Forwarding, load-use stall e flush de redirects sao funcionais.
 module hazard_unit (
     input  logic clk,
     input  logic reset,
@@ -13,6 +13,7 @@ module hazard_unit (
     input  logic [4:0] RdE,
     input  logic [4:0] RdM,
     input  logic       RegWriteM,
+    input  logic [1:0] ResultSrcM,
     input  logic [4:0] RdW,
     input  logic       RegWriteW,
     input  logic       PCSrcE,
@@ -64,14 +65,18 @@ module hazard_unit (
             FlushD = PCSrcE;
             FlushE = PCSrcE | LoadUseHazard;
 
-            // EX/MEM tem prioridade porque guarda o resultado mais recente.
-            // Rd=0 nunca encaminha: x0 deve continuar valendo zero.
-            if (RegWriteM && (RdM != 5'b00000) && (RdM == Rs1E))
+            // O codigo 10 usa ALUResultM, portanto M so pode encaminhar quando
+            // esse fio ja e o resultado arquitetural. LOAD usa a memoria e
+            // JAL/JALR usam PC+4; esses produtores aguardam o caminho de WB.
+            // Entre fontes validas, M conserva prioridade sobre W por ser mais novo.
+            if (RegWriteM && (ResultSrcM == 2'b00) &&
+                (RdM != 5'b00000) && (RdM == Rs1E))
                 ForwardAE = 2'b10;
             else if (RegWriteW && (RdW != 5'b00000) && (RdW == Rs1E))
                 ForwardAE = 2'b01;
 
-            if (RegWriteM && (RdM != 5'b00000) && (RdM == Rs2E))
+            if (RegWriteM && (ResultSrcM == 2'b00) &&
+                (RdM != 5'b00000) && (RdM == Rs2E))
                 ForwardBE = 2'b10;
             else if (RegWriteW && (RdW != 5'b00000) && (RdW == Rs2E))
                 ForwardBE = 2'b01;

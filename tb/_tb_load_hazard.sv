@@ -25,6 +25,9 @@ module tb_load_hazard;
     logic seen_store_both;
     logic seen_x0_no_stall;
     logic seen_alu_store;
+    logic seen_misaligned_no_stall;
+    logic seen_non_alu_m_blocked;
+    logic seen_misaligned_store_value;
 
     riscv_system_top #(
         .IMEM_INIT_FILE ("../mem/load_hazard.hex")
@@ -181,6 +184,38 @@ module tb_load_hazard;
                 seen_x0_no_stall = 1'b1;
             end
 
+            // Caso de borda: a carga desalinhada nao pode substituir o valor
+            // antigo de x5 pelo endereco efetivo 0x101 no dado do STORE.
+            if ((dut.PCE == 32'd188) && (dut.PCD == 32'd192)) begin
+                if (!dut.u_riscv_core.MemWriteD ||
+                    (dut.Rs2D !== 5'd5) || dut.u_riscv_core.StallF ||
+                    dut.u_riscv_core.StallD)
+                    $fatal(1, "FAIL: misaligned LOAD to STORE data stalled");
+                seen_misaligned_no_stall = 1'b1;
+            end
+
+            // Neste ciclo o LOAD esta em M e o STORE em E. Como ResultSrcM=01,
+            // ALUResultM e apenas o endereco 0x101 e nao pode usar o codigo 10.
+            // O ADDI anterior ainda esta em W e fornece o valor antigo correto.
+            if (dut.PCE == 32'd192) begin
+                if ((dut.u_riscv_core.u_datapath.ResultSrcM !== 2'b01) ||
+                    (dut.ALUResultM !== 32'h0000_0101) ||
+                    dut.LoadAccessValidM ||
+                    (dut.u_riscv_core.ForwardBE !== 2'b01) ||
+                    (dut.WriteDataE !== 32'd77) ||
+                    (dut.ALUResultE !== 32'h0000_0134))
+                    $fatal(1, "FAIL: non-ALU LOAD result was forwarded from M");
+                seen_non_alu_m_blocked = 1'b1;
+            end
+
+            if (dut.MemWriteM && (dut.ALUResultM == 32'h0000_0134)) begin
+                if (dut.u_riscv_core.RegWriteW ||
+                    (dut.WriteDataM !== 32'd77) ||
+                    (dut.StoreWriteDataM !== 32'd77))
+                    $fatal(1, "FAIL: suppressed LOAD corrupted STORE data");
+                seen_misaligned_store_value = 1'b1;
+            end
+
             if (dut.MemWriteM && (dut.ALUResultM == 32'h0000_012c)) begin
                 if (dut.StoreWriteDataM !== 32'd77)
                     $fatal(1, "FAIL: existing ALU to STORE forwarding changed");
@@ -211,6 +246,9 @@ module tb_load_hazard;
         seen_store_both = 1'b0;
         seen_x0_no_stall = 1'b0;
         seen_alu_store = 1'b0;
+        seen_misaligned_no_stall = 1'b0;
+        seen_non_alu_m_blocked = 1'b0;
+        seen_misaligned_store_value = 1'b0;
 
         repeat (3) @(posedge clk);
         @(negedge clk);
@@ -228,7 +266,9 @@ module tb_load_hazard;
             !seen_false_lui || !seen_false_auipc || !seen_false_addi ||
             !seen_store_data_no_stall || !seen_store_data_bypass ||
             !seen_store_address || !seen_store_both ||
-            !seen_x0_no_stall || !seen_alu_store)
+            !seen_x0_no_stall || !seen_alu_store ||
+            !seen_misaligned_no_stall || !seen_non_alu_m_blocked ||
+            !seen_misaligned_store_value)
             $fatal(1, "FAIL: a required load hazard scenario was not observed");
 
         if ((dut.u_riscv_core.u_datapath.u_register_file.regs[10] !== 32'd43) ||
@@ -238,20 +278,23 @@ module tb_load_hazard;
             (dut.u_riscv_core.u_datapath.u_register_file.regs[14] !== 32'h0002_8060) ||
             (dut.u_riscv_core.u_datapath.u_register_file.regs[15] !== 32'd5) ||
             (dut.u_riscv_core.u_datapath.u_register_file.regs[16] !== 32'd1) ||
-            (dut.u_riscv_core.u_datapath.u_register_file.regs[18] !== 32'd42))
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[18] !== 32'd42) ||
+            (dut.u_riscv_core.u_datapath.u_register_file.regs[5] !== 32'd77))
             $fatal(1, "FAIL: final Register File values are incorrect");
 
         if ((physical_word(32'h120 >> 2) !== 32'd42) ||
             (physical_word(32'h124 >> 2) !== 32'd5) ||
             (physical_word(32'h128 >> 2) !== 32'h0000_0128) ||
             (physical_word(32'h12c >> 2) !== 32'd77) ||
-            (physical_word(32'h130 >> 2) !== 32'b0))
+            (physical_word(32'h130 >> 2) !== 32'b0) ||
+            (physical_word(32'h134 >> 2) !== 32'd77))
             $fatal(1, "FAIL: final STORE results are incorrect");
 
         $display("PASS: five real load-use dependencies stalled exactly once");
         $display("PASS: UsesRs prevented false LUI, AUIPC and ADDI stalls");
         $display("PASS: late WB-to-MEM STORE data bypass wrote the loaded value");
         $display("PASS: branch, STORE address, x0 and ALU-to-STORE cases passed");
+        $display("PASS: suppressed misaligned LOAD preserves old STORE data");
         $finish;
     end
 endmodule

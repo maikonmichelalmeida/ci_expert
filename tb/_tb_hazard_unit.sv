@@ -13,6 +13,7 @@ module tb_hazard_unit;
     logic [4:0] RdE;
     logic [4:0] RdM;
     logic       RegWriteM;
+    logic [1:0] ResultSrcM;
     logic [4:0] RdW;
     logic       RegWriteW;
     logic       PCSrcE;
@@ -28,7 +29,8 @@ module tb_hazard_unit;
         .clk(clk), .reset(reset), .Rs1D(Rs1D), .Rs2D(Rs2D),
         .UsesRs1D(UsesRs1D), .UsesRs2D(UsesRs2D), .MemWriteD(MemWriteD),
         .Rs1E(Rs1E), .Rs2E(Rs2E), .RdE(RdE),
-        .RdM(RdM), .RegWriteM(RegWriteM), .RdW(RdW), .RegWriteW(RegWriteW),
+        .RdM(RdM), .RegWriteM(RegWriteM), .ResultSrcM(ResultSrcM),
+        .RdW(RdW), .RegWriteW(RegWriteW),
         .PCSrcE(PCSrcE), .ResultSrcE(ResultSrcE),
         .StallF(StallF), .StallD(StallD), .FlushD(FlushD), .FlushE(FlushE),
         .ForwardAE(ForwardAE), .ForwardBE(ForwardBE)
@@ -81,6 +83,7 @@ module tb_hazard_unit;
         RdE = 5'd3;
         RdM = 5'd5;
         RegWriteM = 1'b1;
+        ResultSrcM = 2'b00;
         RdW = 5'd6;
         RegWriteW = 1'b1;
         PCSrcE = 1'b1;
@@ -145,6 +148,21 @@ module tb_hazard_unit;
         RegWriteM = 1'b0;
         RegWriteW = 1'b1;
         check_forwarding(2'b01, 2'b00, "disabled M falls back to valid W");
+
+        // O mux 10 entrega ALUResultM. Logo LOAD (01) e link PC+4 (10) nao
+        // podem vencer um resultado valido que ja esteja em WB.
+        RegWriteM = 1'b1;
+        ResultSrcM = 2'b01;
+        check_forwarding(2'b01, 2'b00, "LOAD in M falls back to valid W");
+
+        ResultSrcM = 2'b10;
+        check_forwarding(2'b01, 2'b00, "PC+4 producer in M falls back to valid W");
+
+        RegWriteW = 1'b0;
+        check_forwarding(2'b00, 2'b00, "non-ALU producer in M waits for WB");
+
+        ResultSrcM = 2'b00;
+        RegWriteW = 1'b1;
 
         // O redirect de JAL limpa IF/ID e ID/EX, sem ativar nenhum stall.
         Rs1E = 5'd1;

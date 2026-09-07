@@ -77,6 +77,7 @@ module riscv_core (
 
     // Sinais ja registrados em M/W e expostos ao forwarding sem duplicar estado.
     logic       RegWriteM;
+    logic [1:0] ResultSrcM;
     logic [4:0] RdM;
     logic       RegWriteW;
     logic [4:0] RdW;
@@ -108,6 +109,7 @@ module riscv_core (
         .StoreWriteDataM(StoreWriteDataM),
         .Rs2M          (Rs2M),
         .RegWriteM    (RegWriteM),
+        .ResultSrcM   (ResultSrcM),
         .RdM          (RdM),
         .RegWriteW    (RegWriteW),
         .RdW          (RdW),
@@ -214,6 +216,7 @@ module riscv_core (
         .RdE       (RdE),
         .RdM       (RdM),
         .RegWriteM (RegWriteM),
+        .ResultSrcM(ResultSrcM),
         .RdW       (RdW),
         .RegWriteW (RegWriteW),
         .PCSrcE    (PCSrcE),

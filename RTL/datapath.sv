@@ -103,6 +103,7 @@ module datapath (
     output logic [2:0]  StoreControlM,
     output logic [2:0]  LoadControlM,
     output logic        RegWriteM,
+    output logic [1:0]  ResultSrcM,
     output logic [4:0]  RdM,
     output logic [4:0]  Rs2M,
     output logic [31:0] StoreWriteDataM,
@@ -125,7 +126,6 @@ module datapath (
     // -------- EX/MEM PIPELINE REGISTER: demais campos --------
     // Junto de ALUResultM, WriteDataM e MemWriteM, estes sinais formam
     // o grande registrador EX/MEM. Exemplo: resultado 1 e Rd=1 seguem juntos.
-    logic [1:0]  ResultSrcM;
     logic [31:0] PCPlus4M;
 
     // ---------------- MEM/WB PIPELINE REGISTER ----------------
@@ -298,8 +298,8 @@ module datapath (
 
     // Os muxes escolhem o valor original (00), o WB (01) ou o resultado mais
     // recente no EX/MEM (10). O codigo 11 e reservado e volta ao valor original.
-    // EX/MEM ainda oferece ALUResultM; produtores nao-ALU nesse estagio serao
-    // tratados quando as demais fontes de resultado entrarem no forwarding.
+    // EX/MEM oferece ALUResultM somente quando a hazard_unit confirma que
+    // ResultSrcM=00. LOAD e JAL/JALR aguardam seu valor arquitetural em WB.
     always_comb begin
         SrcAE = RD1E;
         case (ForwardAE)

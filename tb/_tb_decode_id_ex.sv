@@ -99,6 +99,7 @@ module tb_decode_id_ex;
         .LoadDataM    (),
         .StoreWriteDataM(StoreWriteDataM),
         .RegWriteM    (),
+        .ResultSrcM   (),
         .RdM          (),
         .Rs2M         (Rs2M),
         .RegWriteW    (),

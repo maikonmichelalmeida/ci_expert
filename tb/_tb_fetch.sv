@@ -51,6 +51,7 @@ module tb_fetch;
         .LoadDataM    (),
         .StoreWriteDataM(),
         .RegWriteM    (),
+        .ResultSrcM   (),
         .RdM          (),
         .Rs2M         (),
         .RegWriteW    (),
