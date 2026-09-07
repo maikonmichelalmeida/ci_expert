@@ -49,10 +49,10 @@ menu: update
 >   echo "  7) Executar a regressao completa"; \
 >   echo "  8) Ver o estado do Git"; \
 >   echo "  9) Atualizar a branch pelo Git"; \
->   echo " 10) Sair"; \
+>   echo " Enter) Sair"; \
 >   echo "============================================================"; \
 >   echo " Teste atual: $(if $(strip $(TEST)),$(TEST),default)"; \
->   if ! read -r -p "Escolha [1-10]: " option; then echo; break; fi; \
+>   if ! read -r -p "Escolha [1-9, Enter para sair]: " option; then echo; break; fi; \
 >   option="$${option%$$'\r'}"; \
 >   case "$$option" in \
 >     1) $(MAKE) --no-print-directory _run TEST="$(TEST)";; \
@@ -76,10 +76,10 @@ menu: update
 >     7) $(MAKE) --no-print-directory _regression;; \
 >     8) $(MAKE) --no-print-directory status;; \
 >     9) $(MAKE) --no-print-directory update;; \
->    10) break;; \
+>     "") break;; \
 >     *) echo "Opcao invalida.";; \
 >   esac; \
->   if [ "$$option" != "10" ]; then echo; read -r -p "Pressione Enter para continuar..." || break; fi; \
+>   echo; read -r -p "Pressione Enter para continuar..." || break; \
 > done
 
 help:
@@ -174,7 +174,7 @@ log:
 >   echo "Log nao encontrado: $(RUN_DIR)/$(SIM_LOG)"; \
 >   exit 1; \
 > fi
-> @less -R "$(RUN_DIR)/$(SIM_LOG)"
+> @cat "$(RUN_DIR)/$(SIM_LOG)"
 
 complog:
 > @if [ ! -f "$(RUN_DIR)/$(COMP_LOG)" ]; then \
