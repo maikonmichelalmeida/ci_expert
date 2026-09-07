@@ -2,7 +2,7 @@
 
 // Teste estrutural do Decode e do registrador ID/EX.
 // Ele instancia o datapath diretamente para poder aplicar controles D nao
-// nulos sem transformar a control_unit em um decoder funcional antes da hora.
+// nulos, inclusive combinacoes que o decoder minimo de ADDI nao produz.
 module tb_decode_id_ex;
 
     localparam logic [2:0] IMM_I        = 3'b000;
@@ -32,9 +32,7 @@ module tb_decode_id_ex;
     logic [1:0] ForwardAE;
     logic [1:0] ForwardBE;
 
-    logic [4:0]  rd_addr;
-    logic [31:0] rd_data;
-    logic        rd_we;
+    logic [31:0] ReadDataM;
 
     logic [31:0] PCF;
     logic [31:0] PCPlus4F;
@@ -76,9 +74,10 @@ module tb_decode_id_ex;
     datapath dut (
         .clk          (clk),
         .reset        (reset),
-        .rd_addr      (rd_addr),
-        .rd_data      (rd_data),
-        .rd_we        (rd_we),
+        .ReadDataM    (ReadDataM),
+        .ALUResultM   (),
+        .WriteDataM   (),
+        .MemWriteM    (),
         .InstrF       (InstrF),
         .RegWriteD    (RegWriteD),
         .ResultSrcD   (ResultSrcD),
@@ -137,18 +136,69 @@ module tb_decode_id_ex;
         forever #5 clk = ~clk;
     end
 
-    task automatic write_register (
+    task automatic prepare_register (
         input logic [4:0]  address,
         input logic [31:0] data
     );
         begin
             @(negedge clk);
-            rd_addr = address;
-            rd_data = data;
-            rd_we   = 1'b1;
+            // Deposito somente de simulacao para construir o cenario estrutural.
+            // O RTL de producao tem apenas o escritor real do Writeback.
+            dut.u_register_file.regs[address] = data;
             @(posedge clk);
             #1;
-            rd_we = 1'b0;
+        end
+    endtask
+
+    task automatic check_late_pipeline_transfer;
+        logic [104:0] expected_m;
+        logic [103:0] expected_w;
+        begin
+            @(negedge clk);
+            // Fotografias das entradas ANTES do clock; depois do clock o
+            // estagio anterior ja pode conter outra instrucao.
+            expected_m = {RegWriteE, ResultSrcE, MemWriteE, ALUResultE,
+                          WriteDataE, RdE, PCPlus4E};
+            expected_w = {dut.RegWriteM, dut.ResultSrcM, dut.ALUResultM,
+                          ReadDataM, dut.RdM, dut.PCPlus4M};
+            @(posedge clk);
+            #1;
+            if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, dut.ALUResultM,
+                 dut.WriteDataM, dut.RdM, dut.PCPlus4M} !== expected_m)
+                $fatal(1, "FAIL EX/MEM: fields did not travel together");
+            if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
+                 dut.RdW, dut.PCPlus4W} !== expected_w)
+                $fatal(1, "FAIL MEM/WB: fields did not travel together");
+            $display("PASS: EX/MEM and MEM/WB transport all fields");
+        end
+    endtask
+
+    task automatic check_late_pipeline_reset;
+        begin
+            if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, dut.ALUResultM,
+                 dut.WriteDataM, dut.RdM, dut.PCPlus4M} !== 105'b0)
+                $fatal(1, "FAIL reset: EX/MEM was not cleared");
+            if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
+                 dut.RdW, dut.PCPlus4W} !== 104'b0)
+                $fatal(1, "FAIL reset: MEM/WB was not cleared");
+            $display("PASS: reset clears all EX/MEM and MEM/WB fields");
+        end
+    endtask
+
+    task automatic check_wb_mux (
+        input logic [1:0] source,
+        input logic [31:0] expected
+    );
+        begin
+            @(negedge clk);
+            ResultSrcD = source;
+            // D -> E -> M -> W. RegWriteD=0: este teste so observa o mux.
+            repeat (3) @(posedge clk);
+            #1;
+            if ((dut.ResultSrcW !== source) || (dut.ResultW !== expected))
+                $fatal(1, "FAIL WB mux: source=%b result=%h expected=%h",
+                       source, dut.ResultW, expected);
+            $display("PASS: structural WB mux source=%b result=%h", source, expected);
         end
     endtask
 
@@ -255,13 +305,12 @@ module tb_decode_id_ex;
         FlushE      = 1'b0;
         ForwardAE   = 2'b00;
         ForwardBE   = 2'b00;
-        rd_addr     = 5'b0;
-        rd_data     = 32'b0;
-        rd_we       = 1'b0;
+        ReadDataM   = 32'h1234_5678;
 
-        // Prepara dois valores conhecidos no caminho temporario de escrita.
-        write_register(5'd1, 32'h1111_1111);
-        write_register(5'd2, 32'h2222_2222);
+        // Inicializacao hierarquica restrita a este teste do datapath.
+        prepare_register(5'd1, 32'h1111_1111);
+        prepare_register(5'd2, 32'h2222_2222);
+        check_late_pipeline_reset();
 
         @(negedge clk);
         reset = 1'b0;
@@ -276,7 +325,7 @@ module tb_decode_id_ex;
                         "reserved ImmSrcD");
 
         // Coloca ADD x3,x1,x2 no Decode e aplica um padrao nao nulo em cada
-        // controle. A control_unit real continua neutra; este estimulo existe
+        // controle. A control_unit real so reconhece ADDI; este estimulo existe
         // apenas para provar que o registrador ID/EX transporta os fios.
         @(negedge clk);
         InstrF      = 32'h0020_81b3;
@@ -307,6 +356,8 @@ module tb_decode_id_ex;
         StallD = 1'b1;
         @(posedge clk);
         check_id_ex_transfer();
+        check_late_pipeline_transfer();
+        check_late_pipeline_transfer();
 
         @(negedge clk);
         FlushE = 1'b1;
@@ -315,8 +366,8 @@ module tb_decode_id_ex;
 
         // Prepara valores pequenos para deixar os calculos do Execute faceis
         // de acompanhar: x1=10 e x2=20.
-        write_register(5'd1, 32'd10);
-        write_register(5'd2, 32'd20);
+        prepare_register(5'd1, 32'd10);
+        prepare_register(5'd2, 32'd20);
 
         // Reinicia apenas PC e registradores de pipeline. O Register File nao
         // possui reset e conserva os valores 10 e 20 escritos acima.
@@ -326,11 +377,17 @@ module tb_decode_id_ex;
         StallD      = 1'b0;
         FlushD      = 1'b0;
         InstrF      = 32'b0;
+        RegWriteD   = 1'b0;
+        ResultSrcD  = 2'b00;
+        MemWriteD   = 1'b0;
+        JumpD       = 1'b0;
+        BranchD     = 1'b0;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
         ImmSrcD     = IMM_I;
         @(posedge clk);
         #1;
+        check_late_pipeline_reset();
 
         // Caso registrador-registrador: ADD recebe x1=10 e x2=20.
         @(negedge clk);
@@ -346,8 +403,8 @@ module tb_decode_id_ex;
         check_execute(32'd10, 32'd20, 32'd20, 32'd30, 1'b0,
                       "Execute register-register ADD");
 
-        // Caso imediato: ADDI fornece x1=10 e imediato 5. A control_unit nao
-        // decodifica ADDI; o testbench aplica ALUSrcD e ALUControlD diretamente.
+        // Caso imediato: x1=10 e imediato 5. Este teste estrutural aplica
+        // ALUSrcD e ALUControlD diretamente, sem instanciar a control_unit.
         @(negedge clk);
         StallD      = 1'b0;
         InstrF      = 32'h0050_8093;
@@ -414,7 +471,20 @@ module tb_decode_id_ex;
         end
         $display("PASS: PCTargetE = PCE + ImmExtE");
 
-        $display("PASS: all Decode, Extend, ID/EX and Execute tests completed");
+        // O IF/ID ainda guarda PCD=100 e imediato=16, logo PC+4=104.
+        // As fontes de memoria e PC+4 sao testes de fios, nao de LOAD/JAL.
+        check_wb_mux(2'b00, 32'd16);
+        check_wb_mux(2'b01, 32'h1234_5678);
+        check_wb_mux(2'b10, 32'd104);
+        check_wb_mux(2'b11, 32'b0);
+
+        @(negedge clk);
+        reset = 1'b1;
+        @(posedge clk);
+        #1;
+        check_late_pipeline_reset();
+
+        $display("PASS: all Decode, Extend, pipeline and Execute tests completed");
         $finish;
     end
 

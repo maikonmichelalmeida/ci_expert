@@ -14,7 +14,8 @@ module tb_memories;
 
     instruction_memory #(
         .MEM_BYTES (2048),
-        .INIT_FILE ("../mem/program.hex")
+        // Palavras de teste de memoria; nenhum core executa estas instrucoes.
+        .INIT_FILE ("../tb/fixtures/instructions.hex")
     ) u_instruction_memory (
         .clk   (clk),
         .en    (imem_en),

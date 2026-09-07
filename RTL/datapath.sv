@@ -1,14 +1,9 @@
-// Caminho de dados do core. Neste ponto do projeto ele reune PC, IF/ID,
-// Decode, ID/EX, Execute e banco de registradores, preservando os nomes do diagrama.
+// Caminho de dados IF -> ID -> EX -> MEM -> WB, com os nomes do diagrama.
+// As quatro fronteiras guardam dados e controles da mesma instrucao no clock.
 module datapath (
     // ---------------- Sinais gerais do datapath ----------------
     input  logic clk,
     input  logic reset,
-
-    // -------- Escrita temporaria no Register File --------
-    input  logic [4:0]  rd_addr,
-    input  logic [31:0] rd_data,
-    input  logic        rd_we,
 
     // ---------------- Entrada do IF/ID ----------------
     // InstrF, PCF e PCPlus4F formam os dados que entram no grande
@@ -25,6 +20,8 @@ module datapath (
     input  logic        BranchD,
     input  logic [3:0]  ALUControlD,
     input  logic        ALUSrcD,
+
+    // Selecao do Extend em Decode; o ID/EX transporta ImmExtD, nao ImmSrcD.
     input  logic [2:0]  ImmSrcD,
 
     // -------- Controle dos registradores de pipeline --------
@@ -51,8 +48,8 @@ module datapath (
     output logic [31:0] PCPlus4D,
 
     // ---------------- Estagio Decode (D) ----------------
-    // Estes sinais sao produzidos em Decode e servem como dados de entrada
-    // do grande registrador ID/EX.
+    // Campos para a control_unit e dados para o ID/EX. OpD e Funct3D, por
+    // exemplo, sao usados em Decode e nao precisam atravessar essa fronteira.
     output logic [6:0]  OpD,
     output logic [4:0]  RdD,
     output logic [2:0]  Funct3D,
@@ -87,8 +84,39 @@ module datapath (
     output logic [31:0] WriteDataE,
     output logic [31:0] SrcBE,
     output logic [31:0] ALUResultE,
-    output logic        ZeroE
+    output logic        ZeroE,
+
+    // -------- EX/MEM PIPELINE REGISTER: saidas para a DMEM --------
+    output logic [31:0] ALUResultM,
+    output logic [31:0] WriteDataM,
+    output logic        MemWriteM,
+
+    // ---------------- Entrada do estagio MEM ----------------
+    // A DMEM continua sincrona. Este fio prepara o caminho de dados de leitura,
+    // mas LOAD ainda depende do tratamento correto dessa latencia no futuro.
+    input  logic [31:0] ReadDataM
 );
+
+    // -------- EX/MEM PIPELINE REGISTER: demais campos --------
+    // Junto de ALUResultM, WriteDataM e MemWriteM, estes sinais formam
+    // o grande registrador EX/MEM. Exemplo: resultado 1 e Rd=1 seguem juntos.
+    logic        RegWriteM;
+    logic [1:0]  ResultSrcM;
+    logic [4:0]  RdM;
+    logic [31:0] PCPlus4M;
+
+    // ---------------- MEM/WB PIPELINE REGISTER ----------------
+    // Resultado, destino e enable chegam juntos ao ultimo estagio.
+    // RegWriteW=1 e RdW=1 autorizam gravar ResultW em x1 no proximo posedge.
+    logic        RegWriteW;
+    logic [1:0]  ResultSrcW;
+    logic [31:0] ALUResultW;
+    logic [31:0] ReadDataW;
+    logic [4:0]  RdW;
+    logic [31:0] PCPlus4W;
+
+    // ---------------- Estagio Writeback (W) ----------------
+    logic [31:0] ResultW;
 
     // Sinais ao redor do PC no diagrama: PCSrcE controla o mux, PCTargetE sera
     // o endereco alternativo e StallF sera o enable invertido do registrador PC.
@@ -132,7 +160,7 @@ module datapath (
     end
 
     // O Decode estrutural apenas separa os campos que ocupam posicoes fixas
-    // em InstrD. Nenhum opcode ou funct e interpretado nesta etapa.
+    // em InstrD. A interpretacao de opcode/funct fica na control_unit.
     assign OpD       = InstrD[6:0];
     assign RdD       = InstrD[11:7];
     assign Funct3D   = InstrD[14:12];
@@ -155,14 +183,16 @@ module datapath (
 
     // A leitura vem da instrucao real: Rs1D e Rs2D escolhem os dois
     // registradores, e seus conteudos aparecem no diagrama como RD1D e RD2D.
-    // A escrita ainda usa o caminho externo temporario ate existir Writeback.
+    // O unico escritor agora e o WB: destino RdW e dado ResultW.
+    // O bloqueio por reset impede gravar um WB pendente no proprio flanco
+    // que limpa o pipeline, antes das atribuicoes nao bloqueantes atualizarem W.
     register_file u_register_file (
         .clk      (clk),
         .rs1_addr (Rs1D),
         .rs2_addr (Rs2D),
-        .rd_addr  (rd_addr),
-        .rd_data  (rd_data),
-        .rd_we    (rd_we),
+        .rd_addr  (RdW),
+        .rd_data  (ResultW),
+        .rd_we    (RegWriteW && !reset),
         .rs1_data (RD1D),
         .rs2_data (RD2D)
     );
@@ -207,8 +237,8 @@ module datapath (
 
     // Caminho normal provisoriamente selecionado pelos futuros muxes de
     // forwarding. Isto nao remove nem altera a arquitetura desses muxes:
-    // ForwardAE e ForwardBE continuam chegando ao datapath e, quando existirem
-    // ALUResultM e ResultW, selecionarao tambem essas fontes como no diagrama.
+    // ForwardAE e ForwardBE continuam chegando ao datapath. ALUResultM e
+    // ResultW ja existem, mas so entrarao nesses muxes na etapa de forwarding.
     assign SrcAE      = RD1E;
     assign WriteDataE = RD2E;
 
@@ -236,5 +266,58 @@ module datapath (
     // NegativeE, CarryE e OverflowE preservam as demais flags da ALU. Ainda
     // nao existe logica do pipeline que as consuma; somente ZeroE aparece no
     // caminho de branch previsto pelo diagrama atual.
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            RegWriteM  <= 1'b0;
+            ResultSrcM <= 2'b00;
+            MemWriteM  <= 1'b0;
+            ALUResultM <= 32'b0;
+            WriteDataM <= 32'b0;
+            RdM        <= 5'b0;
+            PCPlus4M   <= 32'b0;
+        end else begin
+            RegWriteM  <= RegWriteE;
+            ResultSrcM <= ResultSrcE;
+            MemWriteM  <= MemWriteE;
+            ALUResultM <= ALUResultE;
+            WriteDataM <= WriteDataE;
+            RdM        <= RdE;
+            PCPlus4M   <= PCPlus4E;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            RegWriteW  <= 1'b0;
+            ResultSrcW <= 2'b00;
+            ALUResultW <= 32'b0;
+            ReadDataW  <= 32'b0;
+            RdW        <= 5'b0;
+            PCPlus4W   <= 32'b0;
+        end else begin
+            RegWriteW  <= RegWriteM;
+            ResultSrcW <= ResultSrcM;
+            ALUResultW <= ALUResultM;
+            // Captura a saida atual da DMEM sem mudar seu timing. Para ADDI
+            // ela nao e usada; esta conexao, sozinha, ainda nao executa LOAD.
+            ReadDataW  <= ReadDataM;
+            RdW        <= RdM;
+            PCPlus4W   <= PCPlus4M;
+        end
+    end
+
+    // Mux final do diagrama: 00 retorna a ALU, 01 a memoria e 10 o PC+4.
+    // Apenas 00 e escolhido pelo decoder ADDI. As outras fontes ficam
+    // preparadas estruturalmente; 11 (reservado) devolve zero.
+    always_comb begin
+        ResultW = 32'b0;
+        case (ResultSrcW)
+            2'b00: ResultW = ALUResultW;
+            2'b01: ResultW = ReadDataW;
+            2'b10: ResultW = PCPlus4W;
+            default: ResultW = 32'b0;
+        endcase
+    end
 
 endmodule

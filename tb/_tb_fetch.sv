@@ -28,7 +28,8 @@ module tb_fetch;
 
     instruction_memory #(
         .MEM_BYTES (2048),
-        .INIT_FILE ("../mem/program.hex")
+        // Palavras variadas somente para verificar Fetch; nao e um programa executado.
+        .INIT_FILE ("../tb/fixtures/instructions.hex")
     ) u_instruction_memory (
         .clk   (clk),
         .en    (1'b1),
@@ -39,9 +40,10 @@ module tb_fetch;
     datapath dut (
         .clk          (clk),
         .reset        (reset),
-        .rd_addr      (5'b0),
-        .rd_data      (32'b0),
-        .rd_we        (1'b0),
+        .ReadDataM    (32'b0),
+        .ALUResultM   (),
+        .WriteDataM   (),
+        .MemWriteM    (),
         .InstrF       (InstrF),
         .RegWriteD    (1'b0),
         .ResultSrcD   (2'b00),

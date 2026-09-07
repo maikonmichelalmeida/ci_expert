@@ -1,17 +1,17 @@
 // Topo do sistema: conecta o core as memorias de instrucao e dados.
-// A escrita do register file ainda e um acesso temporario de teste.
+// O Register File recebe sua escrita exclusivamente do Writeback dentro do core.
 module riscv_system_top #(
     parameter IMEM_INIT_FILE = ""
 )(
     input  logic clk,
-    input  logic reset,
-    input  logic [4:0]  rd_addr,
-    input  logic [31:0] rd_data,
-    input  logic        rd_we
+    input  logic reset
 );
 
-    // data_rdata sera consumido pela futura LSU. Hoje a DMEM permanece isolada.
-    logic [31:0] data_rdata;
+    // Ligacoes estruturais com MEM. A DMEM permanece desabilitada ate a LSU.
+    logic [31:0] ReadDataM;
+    logic [31:0] ALUResultM;
+    logic [31:0] WriteDataM;
+    logic        MemWriteM;
 
     // Estes nomes reproduzem o caminho do diagrama. O sufixo F identifica
     // sinais do estagio Fetch; o sufixo D identifica o estagio Decode.
@@ -34,8 +34,7 @@ module riscv_system_top #(
     logic [31:0] RD2D;
     logic [31:0] ImmExtD;
 
-    // Saidas do registrador ID/EX. Elas alimentam o Execute estrutural, mas
-    // ainda nao atravessam um registrador EX/MEM.
+    // Saidas do registrador ID/EX, que alimentam o Execute.
     logic [31:0] RD1E;
     logic [31:0] RD2E;
     logic [31:0] PCE;
@@ -52,7 +51,7 @@ module riscv_system_top #(
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
 
-    // Caminho combinacional do estagio Execute, ainda sem EX/MEM.
+    // Caminho combinacional do estagio Execute, antes do EX/MEM.
     logic [31:0] SrcAE;
     logic [31:0] WriteDataE;
     logic [31:0] SrcBE;
@@ -74,13 +73,14 @@ module riscv_system_top #(
     );
 
     // O core recebe InstrF da memoria, devolve PCF como endereco da busca e
-    // mantem internamente o caminho ate o Execute estrutural.
+    // mantem internamente o pipeline completo ate a escrita no Register File.
     riscv_core u_riscv_core (
         .clk          (clk),
         .reset        (reset),
-        .rd_addr      (rd_addr),
-        .rd_data      (rd_data),
-        .rd_we        (rd_we),
+        .ReadDataM    (ReadDataM),
+        .ALUResultM   (ALUResultM),
+        .WriteDataM   (WriteDataM),
+        .MemWriteM    (MemWriteM),
         .InstrF       (InstrF),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
@@ -119,15 +119,16 @@ module riscv_system_top #(
         .PCTargetE    (PCTargetE)
     );
 
-    // A DMEM ja ocupa seu lugar no sistema, mas fica desabilitada ate a LSU
-    // fornecer endereco, dado de escrita e strobes validos.
+    // Endereco e dado ja vem do EX/MEM. MemWriteM e zero para ADDI e ainda
+    // nao gera strobes: en/wstrb continuam inativos ate existir a futura LSU.
+    // ReadDataM segue ao MEM/WB, mas LOAD exigira tratar a latencia sincrona.
     data_memory u_data_memory (
         .clk   (clk),
         .en    (1'b0),
-        .addr  (32'b0),
-        .wdata (32'b0),
+        .addr  (ALUResultM),
+        .wdata (WriteDataM),
         .wstrb (4'b0),
-        .rdata (data_rdata)
+        .rdata (ReadDataM)
     );
 
 endmodule

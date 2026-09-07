@@ -3,9 +3,10 @@
 module riscv_core (
     input  logic clk,
     input  logic reset,
-    input  logic [4:0]  rd_addr,
-    input  logic [31:0] rd_data,
-    input  logic        rd_we,
+    input  logic [31:0] ReadDataM,
+    output logic [31:0] ALUResultM,
+    output logic [31:0] WriteDataM,
+    output logic        MemWriteM,
     input  logic [31:0] InstrF,
     output logic [31:0] PCF,
     output logic [31:0] PCPlus4F,
@@ -45,7 +46,7 @@ module riscv_core (
 );
 
     // Controles do estagio Decode. A control_unit ja dirige os fios definitivos,
-    // mas nesta etapa seus valores continuam fixos e seguros.
+    // reconhecendo apenas ADDI e mantendo defaults seguros para os demais casos.
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
@@ -71,9 +72,10 @@ module riscv_core (
     datapath u_datapath (
         .clk          (clk),
         .reset        (reset),
-        .rd_addr      (rd_addr),
-        .rd_data      (rd_data),
-        .rd_we        (rd_we),
+        .ReadDataM    (ReadDataM),
+        .ALUResultM   (ALUResultM),
+        .WriteDataM   (WriteDataM),
+        .MemWriteM    (MemWriteM),
         .InstrF       (InstrF),
         .RegWriteD    (RegWriteD),
         .ResultSrcD   (ResultSrcD),
@@ -127,8 +129,8 @@ module riscv_core (
         .ZeroE        (ZeroE)
     );
 
-    // O decoder ainda nao interpreta nenhuma instrucao. Esta conexao apenas
-    // posiciona OpD/funct como entradas e os controles D como saidas.
+    // O decoder combina OpD/funct para reconhecer somente ADDI. Seus controles
+    // seguem com os dados da instrucao pelos registradores de pipeline.
     control_unit u_control_unit (
         .clk         (clk),
         .reset       (reset),
