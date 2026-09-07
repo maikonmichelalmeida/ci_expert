@@ -8,6 +8,7 @@ module tb_riscv_system_top;
     logic reset;
     integer useful_writes;
     integer x0_writes;
+    logic [31:0] x1_before_write_edge;
 
     // Apelidos locais do TESTBENCH para facilitar a leitura dos checks de WB.
     wire        RegWriteW  = dut.u_riscv_core.u_datapath.RegWriteW;
@@ -110,7 +111,12 @@ module tb_riscv_system_top;
     endtask
 
     task automatic check_addi_until_wb;
+        logic [31:0] x1_at_test_start;
         begin
+            // Apenas le o estado atual de x1. Ele pode iniciar desconhecido em
+            // simulacao, mas deve permanecer exatamente igual ate o WB escrever.
+            x1_at_test_start = x1;
+
             // InstrF aponta para ADDI antes do primeiro clock fora do reset.
             check_fetch(32'd0, 32'h0010_0093, 32'b0, 32'b0, 32'b0);
             @(posedge clk);
@@ -126,6 +132,8 @@ module tb_riscv_system_top;
                 (dut.u_riscv_core.ImmSrcD !== 3'b000) ||
                 (dut.u_riscv_core.ResultSrcD !== 2'b00))
                 $fatal(1, "FAIL: ADDI control signals");
+            if (x1 !== x1_at_test_start)
+                $fatal(1, "FAIL: x1 changed while ADDI was only in Decode");
             $display("PASS: ADDI Decode and ImmExtD=1");
 
             @(posedge clk);
@@ -138,6 +146,8 @@ module tb_riscv_system_top;
                 (dut.SrcAE !== 32'd0) || (dut.SrcBE !== 32'd1) ||
                 (dut.ALUResultE !== 32'd1) || (dut.ZeroE !== 1'b0))
                 $fatal(1, "FAIL: ADDI ID/EX or Execute");
+            if (x1 !== x1_at_test_start)
+                $fatal(1, "FAIL: x1 changed before ADDI reached Writeback");
             $display("PASS: ADDI Execute 0 + 1 = 1");
 
             @(posedge clk);
@@ -149,6 +159,8 @@ module tb_riscv_system_top;
                 (dut.u_riscv_core.u_datapath.ResultSrcM !== 2'b00) ||
                 (dut.u_riscv_core.u_datapath.PCPlus4M !== 32'd4))
                 $fatal(1, "FAIL: ADDI EX/MEM");
+            if (x1 !== x1_at_test_start)
+                $fatal(1, "FAIL: x1 changed while ADDI was in Memory");
             $display("PASS: ADDI MEM ALUResultM=1 RdM=1");
 
             @(posedge clk);
@@ -161,9 +173,10 @@ module tb_riscv_system_top;
                 (dut.u_riscv_core.u_datapath.u_register_file.rd_data !== 32'd1) ||
                 (dut.u_riscv_core.u_datapath.u_register_file.rd_we !== 1'b1))
                 $fatal(1, "FAIL: WB connection to Register File");
-            // O WB acabou de receber ADDI; o banco so grava no proximo clock.
-            if (x1 !== 32'hdead_beef)
+            // O WB acabou de receber ADDI, mas o banco so grava no proximo clock.
+            if (x1 !== x1_at_test_start)
                 $fatal(1, "FAIL: x1 changed before the WB write edge");
+            x1_before_write_edge = x1;
             $display("PASS: ADDI WB ResultW=1 RdW=1 RegWriteW=1");
         end
     endtask
@@ -172,10 +185,8 @@ module tb_riscv_system_top;
         reset = 1'b1;
         useful_writes = 0;
         x0_writes = 0;
+        x1_before_write_edge = 32'bx;
         #1;
-        // Apenas verificacao: valor sentinela para detectar escrita antecipada.
-        // O programa e quem deve substituir este valor por 1, via WB real.
-        dut.u_riscv_core.u_datapath.u_register_file.regs[1] = 32'hdead_beef;
         // Depois das seis palavras do arquivo, mantem somente NOPs na simulacao.
         for (integer i = 6; i < 512; i = i + 1)
             dut.u_instruction_memory.mem[i] = 32'h0000_0013;
@@ -197,7 +208,7 @@ module tb_riscv_system_top;
         @(posedge clk);
         #1;
         check_reset();
-        if ((x1 !== 32'hdead_beef) || (useful_writes != 0))
+        if ((x1 !== x1_before_write_edge) || (useful_writes != 0))
             $fatal(1, "FAIL: pending ADDI wrote during reset");
         $display("PASS: reset cancels pending WB without clearing the Register File");
 
@@ -208,7 +219,8 @@ module tb_riscv_system_top;
         check_addi_until_wb();
         @(posedge clk);
         #1;
-        if ((x1 !== 32'h0000_0001) || (useful_writes != 1))
+        if ((x1 !== 32'h0000_0001) || (x1 === x1_before_write_edge) ||
+            (useful_writes != 1))
             $fatal(1, "FAIL: ADDI did not write x1=1 through WB: x1=%h", x1);
         $display("PASS: end-to-end ADDI wrote x1=00000001 through real WB");
 
