@@ -51,9 +51,11 @@ module riscv_system_top #(
     logic        BranchE;
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
+    logic        ALUASrcE;
 
     // Caminho combinacional do estagio Execute, antes do EX/MEM.
     logic [31:0] SrcAE;
+    logic [31:0] ALUOperandAE;
     logic [31:0] WriteDataE;
     logic [31:0] SrcBE;
     logic [31:0] ALUResultE;
@@ -113,7 +115,9 @@ module riscv_system_top #(
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
         .ALUSrcE      (ALUSrcE),
+        .ALUASrcE     (ALUASrcE),
         .SrcAE        (SrcAE),
+        .ALUOperandAE (ALUOperandAE),
         .WriteDataE   (WriteDataE),
         .SrcBE        (SrcBE),
         .ALUResultE   (ALUResultE),

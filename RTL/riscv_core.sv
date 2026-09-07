@@ -38,7 +38,9 @@ module riscv_core (
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
     output logic        ALUSrcE,
+    output logic        ALUASrcE,
     output logic [31:0] SrcAE,
+    output logic [31:0] ALUOperandAE,
     output logic [31:0] WriteDataE,
     output logic [31:0] SrcBE,
     output logic [31:0] ALUResultE,
@@ -46,8 +48,8 @@ module riscv_core (
     output logic [31:0] PCTargetE
 );
 
-    // Controles do estagio Decode. A control_unit reconhece OP-IMM, OP,
-    // JAL, JALR e os seis branches, mantendo defaults seguros nos demais casos.
+    // Controles do estagio Decode. A control_unit reconhece OP-IMM, OP, LUI,
+    // AUIPC, JAL, JALR e os seis branches, com defaults seguros nos demais casos.
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
@@ -57,6 +59,7 @@ module riscv_core (
     logic [2:0] BranchControlD;
     logic [3:0] ALUControlD;
     logic       ALUSrcD;
+    logic       ALUASrcD;
     logic [2:0] ImmSrcD;
 
     // Sinais ja registrados em M/W e expostos ao forwarding sem duplicar estado.
@@ -98,6 +101,7 @@ module riscv_core (
         .BranchControlD(BranchControlD),
         .ALUControlD  (ALUControlD),
         .ALUSrcD      (ALUSrcD),
+        .ALUASrcD     (ALUASrcD),
         .ImmSrcD      (ImmSrcD),
         .StallF       (StallF),
         .StallD       (StallD),
@@ -137,7 +141,9 @@ module riscv_core (
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
         .ALUSrcE      (ALUSrcE),
+        .ALUASrcE     (ALUASrcE),
         .SrcAE        (SrcAE),
+        .ALUOperandAE (ALUOperandAE),
         .WriteDataE   (WriteDataE),
         .SrcBE        (SrcBE),
         .ALUResultE   (ALUResultE),
@@ -161,6 +167,7 @@ module riscv_core (
         .BranchControlD(BranchControlD),
         .ALUControlD (ALUControlD),
         .ALUSrcD     (ALUSrcD),
+        .ALUASrcD    (ALUASrcD),
         .ImmSrcD     (ImmSrcD)
     );
 

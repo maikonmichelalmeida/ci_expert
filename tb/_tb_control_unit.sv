@@ -15,6 +15,7 @@ module tb_control_unit;
     logic [2:0] BranchControlD;
     logic [3:0] ALUControlD;
     logic ALUSrcD;
+    logic ALUASrcD;
     logic [2:0] ImmSrcD;
     logic [3:0] expected_operation [0:7];
 
@@ -23,7 +24,8 @@ module tb_control_unit;
         .Funct7b5D(Funct7b5D), .RegWriteD(RegWriteD), .ResultSrcD(ResultSrcD),
         .MemWriteD(MemWriteD), .JumpD(JumpD), .JalrD(JalrD), .BranchD(BranchD),
         .BranchControlD(BranchControlD),
-        .ALUControlD(ALUControlD), .ALUSrcD(ALUSrcD), .ImmSrcD(ImmSrcD)
+        .ALUControlD(ALUControlD), .ALUSrcD(ALUSrcD),
+        .ALUASrcD(ALUASrcD), .ImmSrcD(ImmSrcD)
     );
 
     task automatic check_control (
@@ -37,9 +39,34 @@ module tb_control_unit;
                 (ResultSrcD !== 2'b00) || (MemWriteD !== 1'b0) ||
                 (JumpD !== 1'b0) || (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
                 (BranchControlD !== 3'b000) ||
-                (ALUControlD !== expected_alu) || (ImmSrcD !== 3'b000))
+                (ALUControlD !== expected_alu) || (ALUASrcD !== 1'b0) ||
+                (ImmSrcD !== 3'b000))
                 $fatal(1, "FAIL decoder: opcode=%b funct3=%b bit30=%b reset=%b",
                        OpD, Funct3D, Funct7b5D, reset);
+        end
+    endtask
+
+    task automatic check_u_type (
+        input logic [6:0] opcode,
+        input logic [3:0] expected_alu,
+        input logic expected_alu_a_source,
+        input string name
+    );
+        begin
+            OpD = opcode;
+            // Em U-type, funct3 e bit 30 pertencem ao imediato e nao ao decode.
+            Funct3D = 3'b101;
+            Funct7b5D = 1'b1;
+            #1;
+            if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b00) ||
+                (MemWriteD !== 1'b0) || (JumpD !== 1'b0) ||
+                (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
+                (BranchControlD !== 3'b000) ||
+                (ALUControlD !== expected_alu) || (ALUSrcD !== 1'b1) ||
+                (ALUASrcD !== expected_alu_a_source) ||
+                (ImmSrcD !== 3'b100))
+                $fatal(1, "FAIL %s control signals", name);
+            $display("PASS: %s control signals", name);
         end
     endtask
 
@@ -165,6 +192,8 @@ module tb_control_unit;
         check_op(3'b101, 1'b1, 4'b1001, "SRA");
         check_op(3'b110, 1'b0, 4'b0011, "OR");
         check_op(3'b111, 1'b0, 4'b0010, "AND");
+        check_u_type(7'b0110111, 4'b1010, 1'b0, "LUI");
+        check_u_type(7'b0010111, 4'b0000, 1'b1, "AUIPC");
         check_jal();
         check_jalr(3'b000, 1'b1);
         for (integer invalid_f3 = 1; invalid_f3 < 8; invalid_f3 = invalid_f3 + 1)
@@ -182,7 +211,7 @@ module tb_control_unit;
         $display("PASS: six branch conditions and two reserved funct3 values");
 
         // Todas as 128 x 8 combinacoes de opcode/funct3, com bit 30 em 0 e 1.
-        // OP-IMM, OP, branches, JAL e JALR sao os opcodes ativos neste checkpoint.
+        // OP-IMM, OP, LUI, AUIPC, branches, JAL e JALR sao os opcodes ativos.
         for (integer op = 0; op < 128; op = op + 1) begin
             for (integer f3 = 0; f3 < 8; f3 = f3 + 1) begin
                 for (integer bit30 = 0; bit30 < 2; bit30 = bit30 + 1) begin
@@ -190,7 +219,23 @@ module tb_control_unit;
                     Funct3D = f3[2:0];
                     Funct7b5D = bit30[0];
                     #1;
-                    if (op == 111) begin
+                    if (op == 55) begin
+                        if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b00) ||
+                            (MemWriteD !== 1'b0) || (JumpD !== 1'b0) ||
+                            (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
+                            (BranchControlD !== 3'b000) ||
+                            (ALUControlD !== 4'b1010) || (ALUSrcD !== 1'b1) ||
+                            (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b100))
+                            $fatal(1, "FAIL exhaustive LUI decoder");
+                    end else if (op == 23) begin
+                        if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b00) ||
+                            (MemWriteD !== 1'b0) || (JumpD !== 1'b0) ||
+                            (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
+                            (BranchControlD !== 3'b000) ||
+                            (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
+                            (ALUASrcD !== 1'b1) || (ImmSrcD !== 3'b100))
+                            $fatal(1, "FAIL exhaustive AUIPC decoder");
+                    end else if (op == 111) begin
                         if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
                             (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
                             (JalrD !== 1'b0) ||
@@ -243,7 +288,7 @@ module tb_control_unit;
                 end
             end
         end
-        $display("PASS: 2048 decoder combinations including branches, JAL and JALR");
+        $display("PASS: 2048 decoder combinations including LUI, AUIPC, branches, JAL and JALR");
 
         // Reset deve apagar tambem um controle nao nulo, como SRAI=1001.
         check_op_imm(3'b101, 1'b1, 4'b1001, "SRAI before reset");

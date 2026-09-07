@@ -22,6 +22,7 @@ module datapath (
     input  logic [2:0]  BranchControlD,
     input  logic [3:0]  ALUControlD,
     input  logic        ALUSrcD,
+    input  logic        ALUASrcD,
 
     // Selecao do Extend em Decode; o ID/EX transporta ImmExtD, nao ImmSrcD.
     input  logic [2:0]  ImmSrcD,
@@ -81,9 +82,11 @@ module datapath (
     output logic        BranchE,
     output logic [3:0]  ALUControlE,
     output logic        ALUSrcE,
+    output logic        ALUASrcE,
 
     // ---------------- Estagio Execute (E) ----------------
     output logic [31:0] SrcAE,
+    output logic [31:0] ALUOperandAE,
     output logic [31:0] WriteDataE,
     output logic [31:0] SrcBE,
     output logic [31:0] ALUResultE,
@@ -249,6 +252,7 @@ module datapath (
             BranchControlE <= 3'b000;
             ALUControlE <= 4'b0000;
             ALUSrcE     <= 1'b0;
+            ALUASrcE    <= 1'b0;
         end else begin
             RD1E        <= RD1D;
             RD2E        <= RD2D;
@@ -267,6 +271,7 @@ module datapath (
             BranchControlE <= BranchControlD;
             ALUControlE <= ALUControlD;
             ALUSrcE     <= ALUSrcD;
+            ALUASrcE    <= ALUASrcD;
         end
     end
 
@@ -297,6 +302,11 @@ module datapath (
     // ForwardBE atua antes deste mux. Assim STORE podera usar WriteDataE e uma
     // OP-IMM continua usando ImmExtE na ALU, mesmo se ForwardBE estiver ativo.
     assign SrcBE = ALUSrcE ? ImmExtE : WriteDataE;
+
+    // SrcAE conserva o operando rs1 depois do forwarding. Somente AUIPC
+    // seleciona PCE neste pequeno mux para somar o PC da propria instrucao
+    // ao imediato U; as demais instrucoes continuam recebendo SrcAE na ALU.
+    assign ALUOperandAE = ALUASrcE ? PCE : SrcAE;
 
     // A decisao usa os operandos depois dos muxes de forwarding. BEQ/BNE
     // reaproveitam ZeroE da subtracao da ALU; as demais condicoes distinguem
@@ -330,7 +340,7 @@ module datapath (
     // A ALU agora pertence ao caminho real do pipeline. ALUControlE possui os
     // mesmos 4 bits de alu_op, sem decoder intermediario ou ajuste de largura.
     alu u_alu (
-        .a        (SrcAE),
+        .a        (ALUOperandAE),
         .b        (SrcBE),
         .alu_op   (ALUControlE),
         .result   (ALUResultE),
@@ -384,7 +394,7 @@ module datapath (
     end
 
     // Mux final do diagrama: 00 retorna a ALU, 01 a memoria e 10 o PC+4.
-    // OP/OP-IMM escolhem 00 e JAL escolhe 10 para gravar PC+4 em rd.
+    // OP/OP-IMM/LUI/AUIPC escolhem 00; JAL escolhe 10 para gravar PC+4 em rd.
     // A entrada 01 permanece preparada para LOAD; 11 devolve zero.
     always_comb begin
         ResultW = 32'b0;

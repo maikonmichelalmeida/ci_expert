@@ -25,6 +25,7 @@ module tb_decode_id_ex;
     logic [2:0] BranchControlD;
     logic [3:0] ALUControlD;
     logic       ALUSrcD;
+    logic       ALUASrcD;
     logic [2:0] ImmSrcD;
 
     logic       StallF;
@@ -67,7 +68,9 @@ module tb_decode_id_ex;
     logic        BranchE;
     logic [3:0]  ALUControlE;
     logic        ALUSrcE;
+    logic        ALUASrcE;
     logic [31:0] SrcAE;
+    logic [31:0] ALUOperandAE;
     logic [31:0] WriteDataE;
     logic [31:0] SrcBE;
     logic [31:0] ALUResultE;
@@ -95,6 +98,7 @@ module tb_decode_id_ex;
         .BranchControlD(BranchControlD),
         .ALUControlD  (ALUControlD),
         .ALUSrcD      (ALUSrcD),
+        .ALUASrcD     (ALUASrcD),
         .ImmSrcD      (ImmSrcD),
         .StallF       (StallF),
         .StallD       (StallD),
@@ -134,7 +138,9 @@ module tb_decode_id_ex;
         .BranchE      (BranchE),
         .ALUControlE  (ALUControlE),
         .ALUSrcE      (ALUSrcE),
+        .ALUASrcE     (ALUASrcE),
         .SrcAE        (SrcAE),
+        .ALUOperandAE (ALUOperandAE),
         .WriteDataE   (WriteDataE),
         .SrcBE        (SrcBE),
         .ALUResultE   (ALUResultE),
@@ -148,15 +154,52 @@ module tb_decode_id_ex;
 
     task automatic prepare_register (
         input logic [4:0]  address,
-        input logic [31:0] data
+        input logic [31:0] instruction,
+        input logic [2:0]  immediate_source,
+        input logic [3:0]  alu_control,
+        input logic [31:0] expected_data
     );
         begin
+            // O valor entra pelo caminho real D -> E -> M -> W. Assim o teste
+            // nao cria um segundo driver sobre regs[], que pertence ao always_ff
+            // do Register File.
             @(negedge clk);
-            // Deposito somente de simulacao para construir o cenario estrutural.
-            // O RTL de producao tem apenas o escritor real do Writeback.
-            dut.u_register_file.regs[address] = data;
+            reset       = 1'b0;
+            FlushD      = 1'b0;
+            FlushE      = 1'b0;
+            StallD      = 1'b0;
+            InstrF      = instruction;
+            RegWriteD   = 1'b0;
+            ResultSrcD  = 2'b00;
+            MemWriteD   = 1'b0;
+            JumpD       = 1'b0;
+            JalrD       = 1'b0;
+            BranchD     = 1'b0;
+            ALUControlD = 4'b0000;
+            ALUSrcD     = 1'b0;
+            ALUASrcD    = 1'b0;
+            ImmSrcD     = immediate_source;
             @(posedge clk);
             #1;
+
+            @(negedge clk);
+            RegWriteD   = 1'b1;
+            ALUControlD = alu_control;
+            ALUSrcD     = 1'b1;
+            @(posedge clk);
+            #1;
+
+            @(negedge clk);
+            InstrF      = 32'b0;
+            RegWriteD   = 1'b0;
+            ALUControlD = 4'b0000;
+            ALUSrcD     = 1'b0;
+            ImmSrcD     = IMM_I;
+            repeat (3) @(posedge clk);
+            #1;
+            if (dut.u_register_file.regs[address] !== expected_data)
+                $fatal(1, "FAIL prepare x%0d: value=%h expected=%h",
+                       address, dut.u_register_file.regs[address], expected_data);
         end
     endtask
 
@@ -253,7 +296,8 @@ module tb_decode_id_ex;
                 (BranchE     !== BranchD)    ||
                 (dut.BranchControlE !== BranchControlD) ||
                 (ALUControlE !== ALUControlD)||
-                (ALUSrcE     !== ALUSrcD)) begin
+                (ALUSrcE     !== ALUSrcD)    ||
+                (ALUASrcE    !== ALUASrcD)) begin
                 $fatal(1, "FAIL ID/EX: a signal was not transported from D to E");
             end
             $display("PASS: ID/EX transports data and control signals from D to E");
@@ -272,7 +316,7 @@ module tb_decode_id_ex;
                 (JalrE       !== 1'b0)  ||
                 (BranchE     !== 1'b0)  || (dut.BranchControlE !== 3'b000) ||
                 (ALUControlE !== 4'b0000) ||
-                (ALUSrcE     !== 1'b0)) begin
+                (ALUSrcE     !== 1'b0) || (ALUASrcE !== 1'b0)) begin
                 $fatal(1, "FAIL FlushE: ID/EX was not cleared");
             end
             $display("PASS: FlushE clears every ID/EX data and control field");
@@ -314,6 +358,7 @@ module tb_decode_id_ex;
         BranchControlD = 3'b000;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
+        ALUASrcD    = 1'b0;
         ImmSrcD     = IMM_I;
         StallF      = 1'b0;
         StallD      = 1'b0;
@@ -323,20 +368,30 @@ module tb_decode_id_ex;
         ForwardBE   = 2'b00;
         ReadDataM   = 32'h1234_5678;
 
-        // Inicializacao hierarquica restrita a este teste do datapath.
-        prepare_register(5'd1, 32'h1111_1111);
-        prepare_register(5'd2, 32'h2222_2222);
+        repeat (2) @(posedge clk);
+        #1;
         check_late_pipeline_reset();
 
         @(negedge clk);
         reset = 1'b0;
+
+        // Prepara x1/x2 pelo Writeback real. LUI facilita criar padroes visuais
+        // sem qualquer escrita hierarquica concorrente no Register File.
+        prepare_register(5'd1, 32'h1111_10b7, IMM_U, 4'b1010,
+                         32'h1111_1000);
+        prepare_register(5'd2, 32'h2222_2137, IMM_U, 4'b1010,
+                         32'h2222_2000);
 
         // Cada instrucao abaixo exercita uma montagem diferente do Extend.
         check_immediate(32'hfff0_0093, IMM_I, 32'hffff_ffff, "I format -1");
         check_immediate(32'hfe20_ae23, IMM_S, 32'hffff_fffc, "S format -4");
         check_immediate(32'h0000_0463, IMM_B, 32'h0000_0008, "B format +8");
         check_immediate(32'h0100_006f, IMM_J, 32'h0000_0010, "J format +16");
-        check_immediate(32'h1234_50b7, IMM_U, 32'h1234_5000, "U format");
+        check_immediate(32'h0000_00b7, IMM_U, 32'h0000_0000, "U format 00000");
+        check_immediate(32'h0000_10b7, IMM_U, 32'h0000_1000, "U format 00001");
+        check_immediate(32'h7fff_f0b7, IMM_U, 32'h7fff_f000, "U format 7ffff");
+        check_immediate(32'h8000_00b7, IMM_U, 32'h8000_0000, "U format 80000");
+        check_immediate(32'hffff_f0b7, IMM_U, 32'hffff_f000, "U format fffff");
         check_immediate(32'hffff_ffff, IMM_RESERVED, 32'h0000_0000,
                         "reserved ImmSrcD");
 
@@ -355,6 +410,7 @@ module tb_decode_id_ex;
         BranchControlD = 3'b111;
         ALUControlD = 4'b1101;
         ALUSrcD     = 1'b1;
+        ALUASrcD    = 1'b1;
         @(posedge clk);
         #1;
 
@@ -363,7 +419,7 @@ module tb_decode_id_ex;
             (Funct3D   !== 3'b000)     || (Funct7b5D !== 1'b0)) begin
             $fatal(1, "FAIL Decode: ADD fields were not extracted correctly");
         end
-        if ((RD1D !== 32'h1111_1111) || (RD2D !== 32'h2222_2222)) begin
+        if ((RD1D !== 32'h1111_1000) || (RD2D !== 32'h2222_2000)) begin
             $fatal(1, "FAIL Decode: Register File data did not reach RD1D/RD2D");
         end
         $display("PASS: Decode fields and Register File reads remain correct");
@@ -386,8 +442,8 @@ module tb_decode_id_ex;
 
         // Prepara valores pequenos para deixar os calculos do Execute faceis
         // de acompanhar: x1=10 e x2=20.
-        prepare_register(5'd1, 32'd10);
-        prepare_register(5'd2, 32'd20);
+        prepare_register(5'd1, 32'h00a0_0093, IMM_I, 4'b0000, 32'd10);
+        prepare_register(5'd2, 32'h0140_0113, IMM_I, 4'b0000, 32'd20);
 
         // Reinicia apenas PC e registradores de pipeline. O Register File nao
         // possui reset e conserva os valores 10 e 20 escritos acima.
@@ -406,6 +462,7 @@ module tb_decode_id_ex;
         BranchControlD = 3'b000;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
+        ALUASrcD    = 1'b0;
         ImmSrcD     = IMM_I;
         @(posedge clk);
         #1;

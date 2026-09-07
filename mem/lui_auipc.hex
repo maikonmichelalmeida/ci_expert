@@ -1,0 +1,30 @@
+123452b7 // lui   x5,0x12345
+fffff337 // lui   x6,0xfffff
+800003b7 // lui   x7,0x80000
+abcde037 // lui   x0,0xabcde
+00000517 // auipc x10,0
+00001597 // auipc x11,1
+fffff617 // auipc x12,0xfffff
+000017b7 // lui   x15,1
+00578813 // addi  x16,x15,5: forwarding M -> E
+00001897 // auipc x17,1
+00488913 // addi  x18,x17,4: forwarding M -> E
+000029b7 // lui   x19,2
+00700a13 // addi  x20,x0,7: instrucao independente
+00998a93 // addi  x21,x19,9: forwarding W -> E
+00003b37 // lui   x22,3
+00100b93 // addi  x23,x0,1: independente
+00200c13 // addi  x24,x0,2: independente
+004b0c93 // addi  x25,x22,4: bypass WB -> Decode
+00001137 // lui   x2,1
+80010113 // addi  x2,x2,-2048: forma 0x00000800
+00000717 // auipc x14,0
+01070713 // addi  x14,x14,16: endereco PC-relative
+04d00193 // addi  x3,x0,77
+00018d37 // lui   x26,0x18: rs1 extraido coincide com x3
+03700213 // addi  x4,x0,55
+00020d97 // auipc x27,0x20: rs1 extraido coincide com x4
+00000013 // nop
+00000013 // nop
+00000013 // nop
+00000013 // nop

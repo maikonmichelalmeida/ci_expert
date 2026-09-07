@@ -135,6 +135,7 @@ module tb_jalr;
         begin
             if ((dut.PCE !== expected_pce) || (JalrE !== 1'b1) ||
                 (dut.JumpE !== 1'b1) || (dut.ALUSrcE !== 1'b1) ||
+                (dut.ALUASrcE !== 1'b0) ||
                 (dut.ALUControlE !== 4'b0000) ||
                 (ForwardAE !== expected_forward) ||
                 (dut.SrcAE !== expected_src_a) ||

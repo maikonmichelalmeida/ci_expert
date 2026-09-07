@@ -147,7 +147,8 @@ module tb_branch;
 
             if ((dut.RegWriteE !== 1'b0) || (dut.MemWriteE !== 1'b0) ||
                 (dut.JumpE !== 1'b0) || (dut.JalrE !== 1'b0) ||
-                (dut.ALUSrcE !== 1'b0) || (dut.ALUControlE !== 4'b0001) ||
+                (dut.ALUSrcE !== 1'b0) || (dut.ALUASrcE !== 1'b0) ||
+                (dut.ALUControlE !== 4'b0001) ||
                 (dut.SrcBE !== dut.WriteDataE) ||
                 (dut.ALUResultE !== (dut.SrcAE - dut.WriteDataE)) ||
                 (dut.ZeroE !== (dut.SrcAE == dut.WriteDataE)))

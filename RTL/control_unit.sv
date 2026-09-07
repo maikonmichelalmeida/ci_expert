@@ -1,4 +1,4 @@
-// Decodificacao de OP-IMM, OP, JAL, JALR e branches do RV32I.
+// Decodificacao de OP-IMM, OP, LUI, AUIPC, JAL, JALR e branches do RV32I.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -16,6 +16,7 @@ module control_unit (
     output logic [2:0] BranchControlD,
     output logic [3:0] ALUControlD,
     output logic       ALUSrcD,
+    output logic       ALUASrcD,
     output logic [2:0] ImmSrcD
 );
 
@@ -31,6 +32,7 @@ module control_unit (
         BranchControlD = 3'b000;
         ALUControlD = 4'b0000;
         ALUSrcD     = 1'b0;
+        ALUASrcD    = 1'b0;
         ImmSrcD     = 3'b000;
 
         if (!reset) begin
@@ -126,6 +128,22 @@ module control_unit (
                         default: RegWriteD = 1'b0;
                     endcase
                 end
+                7'b0110111: begin // LUI: imediato U passa pela ALU ate WB.
+                    RegWriteD   = 1'b1;
+                    ResultSrcD  = 2'b00;
+                    ALUControlD = 4'b1010; // PASS_B
+                    ALUSrcD     = 1'b1;
+                    ALUASrcD    = 1'b0;    // Entrada A e ignorada por PASS_B.
+                    ImmSrcD     = 3'b100;
+                end
+                7'b0010111: begin // AUIPC: PC da instrucao + imediato U.
+                    RegWriteD   = 1'b1;
+                    ResultSrcD  = 2'b00;
+                    ALUControlD = 4'b0000; // ADD
+                    ALUSrcD     = 1'b1;
+                    ALUASrcD    = 1'b1;    // Seleciona PCE na entrada A.
+                    ImmSrcD     = 3'b100;
+                end
                 7'b1101111: begin // JAL: grava PC+4 e salta para PC+imediato J.
                     RegWriteD  = 1'b1;
                     ResultSrcD = 2'b10;
@@ -177,6 +195,8 @@ module control_unit (
     // imediato -1 chega como 0xffffffff antes da comparacao unsigned.
     // Nos shifts, a ALU usa somente B[4:0]; em OP, B recebe RD2E e, em OP-IMM,
     // recebe ImmExtE. Nao precisamos de outro caminho para o shift amount.
+    // LUI usa PASS_B e AUIPC usa ADD com PCE na entrada A. Ambos mantem
+    // ResultSrcD=00 para seguir pelo caminho normal ALU -> M -> W.
     // JAL e branch usam o somador PCE+ImmExtE. JALR configura a ALU como ADD
     // para formar SrcAE+ImmExtE; JalrE escolhe qual target alimenta o PC.
     // O decoder recebe somente InstrD[30]. Assim, reconhece as codificacoes

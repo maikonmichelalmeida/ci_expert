@@ -11,6 +11,7 @@ module tb_register_file;
     logic rd_we;
     logic [31:0] rs1_data;
     logic [31:0] rs2_data;
+    logic [31:0] x0_storage_before;
 
     register_file dut (
         .clk(clk), .rs1_addr(rs1_addr), .rs2_addr(rs2_addr),
@@ -43,12 +44,12 @@ module tb_register_file;
         rd_addr = 5'd0;
         rd_data = 32'b0;
         rd_we = 1'b0;
-        // Sentinela de simulacao: nem uma tentativa de escrita pode alterar
-        // a posicao fisica 0; as duas portas devem continuar devolvendo zero.
-        dut.regs[0] = 32'ha5a5_a5a5;
+        // A tentativa usa somente a porta real de escrita. O testbench nao
+        // dirige regs[] diretamente, pois esse estado pertence ao always_ff.
+        x0_storage_before = dut.regs[0];
         write_register(5'd0, 32'hffff_ffff, 1'b1);
         if ((rs1_data !== 32'b0) || (rs2_data !== 32'b0) ||
-            (dut.regs[0] !== 32'ha5a5_a5a5))
+            (dut.regs[0] !== x0_storage_before))
             $fatal(1, "FAIL: x0 protection");
         $display("PASS: writes to x0 are ignored and both reads return zero");
 
