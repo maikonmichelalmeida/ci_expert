@@ -18,6 +18,8 @@ module riscv_system_top #(
     logic        LoadAccessValidM;
     logic        LoadEnableM;
     logic [31:0] LoadDataM;
+    logic [31:0] StoreWriteDataM;
+    logic [4:0]  Rs2M;
     logic [31:0] StoreDataM;
     logic [3:0]  StoreWStrbM;
     logic        StoreEnableM;
@@ -102,6 +104,8 @@ module riscv_system_top #(
         .LoadAccessValidM(LoadAccessValidM),
         .LoadEnableM  (LoadEnableM),
         .LoadDataM    (LoadDataM),
+        .StoreWriteDataM(StoreWriteDataM),
+        .Rs2M          (Rs2M),
         .InstrF       (InstrF),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
@@ -151,8 +155,8 @@ module riscv_system_top #(
     assign StoreShiftAmountM = {ALUResultM[1:0], 3'b000};
 
     // Pequeno adaptador entre o pipeline e os quatro byte lanes da DMEM.
-    // WriteDataM continua sendo o rs2 integral do diagrama; somente StoreDataM
-    // desloca os bytes ate as lanes fisicas selecionadas por StoreWStrbM.
+    // WriteDataM continua sendo o rs2 capturado pelo EX/MEM. StoreWriteDataM
+    // acrescenta apenas o bypass tardio WB->MEM antes do alinhamento das lanes.
     always_comb begin
         StoreDataM   = 32'b0;
         StoreWStrbM  = 4'b0000;
@@ -161,20 +165,20 @@ module riscv_system_top #(
         if (MemWriteM) begin
             case (StoreControlM)
                 3'b000: begin // SB aceita qualquer byte da palavra.
-                    StoreDataM   = WriteDataM << StoreShiftAmountM;
+                    StoreDataM   = StoreWriteDataM << StoreShiftAmountM;
                     StoreWStrbM  = 4'b0001 << ALUResultM[1:0];
                     StoreEnableM = 1'b1;
                 end
                 3'b001: begin // SH aceita somente enderecos pares.
                     if (ALUResultM[0] == 1'b0) begin
-                        StoreDataM   = WriteDataM << StoreShiftAmountM;
+                        StoreDataM   = StoreWriteDataM << StoreShiftAmountM;
                         StoreWStrbM  = 4'b0011 << ALUResultM[1:0];
                         StoreEnableM = 1'b1;
                     end
                 end
                 3'b010: begin // SW aceita somente multiplos de quatro.
                     if (ALUResultM[1:0] == 2'b00) begin
-                        StoreDataM   = WriteDataM;
+                        StoreDataM   = StoreWriteDataM;
                         StoreWStrbM  = 4'b1111;
                         StoreEnableM = 1'b1;
                     end

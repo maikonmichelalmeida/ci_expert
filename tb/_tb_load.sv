@@ -143,7 +143,7 @@ module tb_load;
 
         if (!reset) begin
             if (dut.u_riscv_core.StallF || dut.u_riscv_core.StallD)
-                $fatal(1, "FAIL: LOAD checkpoint introduced a stall");
+                $fatal(1, "FAIL: unexpected stall in baseline LOAD regression");
 
             // ---------------- Decode ----------------
             if (dut.OpD == 7'b0000011) begin

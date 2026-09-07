@@ -5,6 +5,9 @@ module tb_hazard_unit;
     logic reset;
     logic [4:0] Rs1D;
     logic [4:0] Rs2D;
+    logic       UsesRs1D;
+    logic       UsesRs2D;
+    logic       MemWriteD;
     logic [4:0] Rs1E;
     logic [4:0] Rs2E;
     logic [4:0] RdE;
@@ -23,6 +26,7 @@ module tb_hazard_unit;
 
     hazard_unit dut (
         .clk(clk), .reset(reset), .Rs1D(Rs1D), .Rs2D(Rs2D),
+        .UsesRs1D(UsesRs1D), .UsesRs2D(UsesRs2D), .MemWriteD(MemWriteD),
         .Rs1E(Rs1E), .Rs2E(Rs2E), .RdE(RdE),
         .RdM(RdM), .RegWriteM(RegWriteM), .RdW(RdW), .RegWriteW(RegWriteW),
         .PCSrcE(PCSrcE), .ResultSrcE(ResultSrcE),
@@ -48,11 +52,30 @@ module tb_hazard_unit;
         end
     endtask
 
+    task automatic check_load_use (
+        input logic expected_stall,
+        input logic expected_flush_d,
+        input string test_name
+    );
+        begin
+            #1;
+            if ({StallF, StallD, FlushD, FlushE} !==
+                {expected_stall, expected_stall, expected_flush_d,
+                 (expected_stall | expected_flush_d)})
+                $fatal(1, "FAIL %s: StallF=%b StallD=%b FlushD=%b FlushE=%b",
+                       test_name, StallF, StallD, FlushD, FlushE);
+            $display("PASS: %s", test_name);
+        end
+    endtask
+
     initial begin
         clk = 1'b0;
         reset = 1'b1;
         Rs1D = 5'd1;
         Rs2D = 5'd2;
+        UsesRs1D = 1'b0;
+        UsesRs2D = 1'b0;
+        MemWriteD = 1'b0;
         Rs1E = 5'd5;
         Rs2E = 5'd6;
         RdE = 5'd3;
@@ -140,7 +163,56 @@ module tb_hazard_unit;
         PCSrcE = 1'b0;
         check_forwarding(2'b00, 2'b00, "flush returns to zero after redirect");
 
-        $display("PASS: hazard_unit forwarding and JAL flush tests completed");
+        // LOAD em E e consumidor em D: PC e IF/ID param enquanto FlushE
+        // coloca uma bolha no ID/EX. No ciclo seguinte o LOAD pode seguir a M.
+        RegWriteM = 1'b0;
+        RegWriteW = 1'b0;
+        ResultSrcE = 2'b01;
+        RdE = 5'd5;
+        Rs1D = 5'd5;
+        Rs2D = 5'd9;
+        UsesRs1D = 1'b1;
+        UsesRs2D = 1'b0;
+        MemWriteD = 1'b0;
+        check_load_use(1'b1, 1'b0, "LOAD dependency through rs1 stalls");
+
+        Rs1D = 5'd9;
+        Rs2D = 5'd5;
+        UsesRs1D = 1'b0;
+        UsesRs2D = 1'b1;
+        check_load_use(1'b1, 1'b0, "LOAD dependency through rs2 stalls");
+
+        // Em STORE, rs2 e necessario somente em MEM e sera corrigido pelo
+        // bypass tardio. Por isso uma dependencia exclusiva em rs2 nao para.
+        UsesRs1D = 1'b1;
+        MemWriteD = 1'b1;
+        check_load_use(1'b0, 1'b0, "LOAD to STORE data does not stall");
+
+        Rs1D = 5'd5;
+        Rs2D = 5'd9;
+        check_load_use(1'b1, 1'b0, "LOAD to STORE address stalls");
+
+        RdE = 5'd0;
+        Rs1D = 5'd0;
+        check_load_use(1'b0, 1'b0, "x0 dependency is ignored");
+
+        RdE = 5'd5;
+        Rs1D = 5'd5;
+        UsesRs1D = 1'b0;
+        UsesRs2D = 1'b0;
+        MemWriteD = 1'b0;
+        check_load_use(1'b0, 1'b0, "unused rs1 field does not stall");
+
+        Rs1D = 5'd9;
+        Rs2D = 5'd5;
+        check_load_use(1'b0, 1'b0, "unused rs2 field does not stall");
+
+        UsesRs1D = 1'b1;
+        Rs1D = 5'd5;
+        PCSrcE = 1'b1;
+        check_load_use(1'b0, 1'b1, "redirect has priority over load-use");
+
+        $display("PASS: hazard_unit forwarding, redirect and load-use tests completed");
         $finish;
     end
 endmodule

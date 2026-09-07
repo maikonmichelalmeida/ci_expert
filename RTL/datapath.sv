@@ -104,6 +104,8 @@ module datapath (
     output logic [2:0]  LoadControlM,
     output logic        RegWriteM,
     output logic [4:0]  RdM,
+    output logic [4:0]  Rs2M,
+    output logic [31:0] StoreWriteDataM,
 
     // ---------------- Formatacao de LOAD no estagio MEM ----------------
     output logic        LoadAccessValidM,
@@ -382,6 +384,7 @@ module datapath (
             ALUResultM <= 32'b0;
             WriteDataM <= 32'b0;
             RdM        <= 5'b0;
+            Rs2M       <= 5'b0;
             PCPlus4M   <= 32'b0;
         end else begin
             RegWriteM  <= RegWriteE;
@@ -392,8 +395,19 @@ module datapath (
             ALUResultM <= ALUResultE;
             WriteDataM <= WriteDataE;
             RdM        <= RdE;
+            Rs2M       <= Rs2E;
             PCPlus4M   <= PCPlus4E;
         end
+    end
+
+    // WriteDataM preserva o valor capturado no EX/MEM. Este mux separado
+    // corrige somente o dado arquitetural de STORE quando o produtor esta em
+    // WB, sem acrescentar LoadDataM ao caminho de entrada da ALU em Execute.
+    always_comb begin
+        StoreWriteDataM = WriteDataM;
+
+        if (MemWriteM && RegWriteW && (RdW != 5'b00000) && (RdW == Rs2M))
+            StoreWriteDataM = ResultW;
     end
 
     // Os dois bits baixos escolhem uma das quatro byte lanes. A concatenacao

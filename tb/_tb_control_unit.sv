@@ -19,6 +19,8 @@ module tb_control_unit;
     logic ALUSrcD;
     logic ALUASrcD;
     logic [2:0] ImmSrcD;
+    logic UsesRs1D;
+    logic UsesRs2D;
     logic [3:0] expected_operation [0:7];
 
     control_unit dut (
@@ -29,7 +31,8 @@ module tb_control_unit;
         .JumpD(JumpD), .JalrD(JalrD), .BranchD(BranchD),
         .BranchControlD(BranchControlD),
         .ALUControlD(ALUControlD), .ALUSrcD(ALUSrcD),
-        .ALUASrcD(ALUASrcD), .ImmSrcD(ImmSrcD)
+        .ALUASrcD(ALUASrcD), .ImmSrcD(ImmSrcD),
+        .UsesRs1D(UsesRs1D), .UsesRs2D(UsesRs2D)
     );
 
     task automatic check_control (
@@ -37,7 +40,18 @@ module tb_control_unit;
         input logic expected_alu_source,
         input logic [3:0] expected_alu
     );
+        logic expected_uses_rs1;
+        logic expected_uses_rs2;
         begin
+            expected_uses_rs1 = 1'b0;
+            expected_uses_rs2 = 1'b0;
+            if (!reset && expected_write && (OpD == 7'b0010011))
+                expected_uses_rs1 = 1'b1;
+            if (!reset && expected_write && (OpD == 7'b0110011)) begin
+                expected_uses_rs1 = 1'b1;
+                expected_uses_rs2 = 1'b1;
+            end
+
             if ((RegWriteD !== expected_write) ||
                 (ALUSrcD !== expected_alu_source) ||
                 (ResultSrcD !== 2'b00) || (MemWriteD !== 1'b0) ||
@@ -45,7 +59,9 @@ module tb_control_unit;
                 (JumpD !== 1'b0) || (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
                 (BranchControlD !== 3'b000) ||
                 (ALUControlD !== expected_alu) || (ALUASrcD !== 1'b0) ||
-                (ImmSrcD !== 3'b000))
+                (ImmSrcD !== 3'b000) ||
+                (UsesRs1D !== expected_uses_rs1) ||
+                (UsesRs2D !== expected_uses_rs2))
                 $fatal(1, "FAIL decoder: opcode=%b funct3=%b bit30=%b reset=%b",
                        OpD, Funct3D, Funct7b5D, reset);
         end
@@ -67,7 +83,8 @@ module tb_control_unit;
                     (JumpD !== 1'b0) || (JalrD !== 1'b0) ||
                     (BranchD !== 1'b0) || (BranchControlD !== 3'b000) ||
                     (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
-                    (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b000))
+                    (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b000) ||
+                    (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b0))
                     $fatal(1, "FAIL valid LOAD control signals funct3=%b", funct3);
             end else begin
                 check_control(1'b0, 1'b0, 4'b0000);
@@ -91,7 +108,8 @@ module tb_control_unit;
                     (JumpD !== 1'b0) || (JalrD !== 1'b0) ||
                     (BranchD !== 1'b0) || (BranchControlD !== 3'b000) ||
                     (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
-                    (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b001))
+                    (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b001) ||
+                    (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b1))
                     $fatal(1, "FAIL valid STORE control signals funct3=%b", funct3);
             end else begin
                 check_control(1'b0, 1'b0, 4'b0000);
@@ -117,7 +135,7 @@ module tb_control_unit;
                 (BranchControlD !== 3'b000) ||
                 (ALUControlD !== expected_alu) || (ALUSrcD !== 1'b1) ||
                 (ALUASrcD !== expected_alu_a_source) ||
-                (ImmSrcD !== 3'b100))
+                (ImmSrcD !== 3'b100) || UsesRs1D || UsesRs2D)
                 $fatal(1, "FAIL %s control signals", name);
             $display("PASS: %s control signals", name);
         end
@@ -167,7 +185,8 @@ module tb_control_unit;
                 (JalrD !== 1'b0) ||
                 (BranchD !== 1'b0) || (BranchControlD !== 3'b000) ||
                 (ALUControlD !== 4'b0000) ||
-                (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011))
+                (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011) ||
+                UsesRs1D || UsesRs2D)
                 $fatal(1, "FAIL JAL control signals");
             $display("PASS: JAL control signals");
         end
@@ -185,7 +204,8 @@ module tb_control_unit;
                     (JalrD !== 1'b1) || (BranchD !== 1'b0) ||
                     (BranchControlD !== 3'b000) ||
                     (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
-                    (ImmSrcD !== 3'b000))
+                    (ImmSrcD !== 3'b000) ||
+                    (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b0))
                     $fatal(1, "FAIL valid JALR control signals");
             end else begin
                 check_control(1'b0, 1'b0, 4'b0000);
@@ -205,7 +225,8 @@ module tb_control_unit;
                     (JalrD !== 1'b0) || (BranchD !== 1'b1) ||
                     (BranchControlD !== funct3) ||
                     (ALUControlD !== 4'b0001) || (ALUSrcD !== 1'b0) ||
-                    (ImmSrcD !== 3'b010))
+                    (ImmSrcD !== 3'b010) ||
+                    (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b1))
                     $fatal(1, "FAIL branch control signals funct3=%b", funct3);
             end else begin
                 check_control(1'b0, 1'b0, 4'b0000);
@@ -299,7 +320,8 @@ module tb_control_unit;
                                 (BranchControlD !== 3'b000) ||
                                 (ALUControlD !== 4'b0000) ||
                                 (ALUSrcD !== 1'b1) || (ALUASrcD !== 1'b0) ||
-                                (ImmSrcD !== 3'b000))
+                                (ImmSrcD !== 3'b000) ||
+                                (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b0))
                                 $fatal(1, "FAIL exhaustive LOAD decoder");
                         end else begin
                             check_control(1'b0, 1'b0, 4'b0000);
@@ -315,7 +337,8 @@ module tb_control_unit;
                                 (BranchControlD !== 3'b000) ||
                                 (ALUControlD !== 4'b0000) ||
                                 (ALUSrcD !== 1'b1) || (ALUASrcD !== 1'b0) ||
-                                (ImmSrcD !== 3'b001))
+                                (ImmSrcD !== 3'b001) ||
+                                (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b1))
                                 $fatal(1, "FAIL exhaustive STORE decoder");
                         end else begin
                             check_control(1'b0, 1'b0, 4'b0000);
@@ -326,7 +349,8 @@ module tb_control_unit;
                             (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
                             (BranchControlD !== 3'b000) ||
                             (ALUControlD !== 4'b1010) || (ALUSrcD !== 1'b1) ||
-                            (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b100))
+                            (ALUASrcD !== 1'b0) || (ImmSrcD !== 3'b100) ||
+                            UsesRs1D || UsesRs2D)
                             $fatal(1, "FAIL exhaustive LUI decoder");
                     end else if (op == 23) begin
                         if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b00) ||
@@ -334,7 +358,8 @@ module tb_control_unit;
                             (JalrD !== 1'b0) || (BranchD !== 1'b0) ||
                             (BranchControlD !== 3'b000) ||
                             (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
-                            (ALUASrcD !== 1'b1) || (ImmSrcD !== 3'b100))
+                            (ALUASrcD !== 1'b1) || (ImmSrcD !== 3'b100) ||
+                            UsesRs1D || UsesRs2D)
                             $fatal(1, "FAIL exhaustive AUIPC decoder");
                     end else if (op == 111) begin
                         if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
@@ -342,7 +367,8 @@ module tb_control_unit;
                             (JalrD !== 1'b0) ||
                             (BranchD !== 1'b0) || (BranchControlD !== 3'b000) ||
                             (ALUControlD !== 4'b0000) ||
-                            (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011))
+                            (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011) ||
+                            UsesRs1D || UsesRs2D)
                             $fatal(1, "FAIL exhaustive JAL decoder");
                     end else if (op == 103) begin
                         if (f3 == 0) begin
@@ -351,7 +377,8 @@ module tb_control_unit;
                                 (JalrD !== 1'b1) || (BranchD !== 1'b0) ||
                                 (BranchControlD !== 3'b000) ||
                                 (ALUControlD !== 4'b0000) || (ALUSrcD !== 1'b1) ||
-                                (ImmSrcD !== 3'b000))
+                                (ImmSrcD !== 3'b000) ||
+                                (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b0))
                                 $fatal(1, "FAIL exhaustive valid JALR decoder");
                         end else begin
                             check_control(1'b0, 1'b0, 4'b0000);
@@ -363,7 +390,8 @@ module tb_control_unit;
                                 (JalrD !== 1'b0) || (BranchD !== 1'b1) ||
                                 (BranchControlD !== f3[2:0]) ||
                                 (ALUControlD !== 4'b0001) ||
-                                (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b010))
+                                (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b010) ||
+                                (UsesRs1D !== 1'b1) || (UsesRs2D !== 1'b1))
                                 $fatal(1, "FAIL exhaustive branch decoder");
                         end else begin
                             check_control(1'b0, 1'b0, 4'b0000);

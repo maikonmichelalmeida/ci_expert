@@ -12,6 +12,8 @@ module riscv_core (
     output logic        LoadAccessValidM,
     output logic        LoadEnableM,
     output logic [31:0] LoadDataM,
+    output logic [31:0] StoreWriteDataM,
+    output logic [4:0]  Rs2M,
     input  logic [31:0] InstrF,
     output logic [31:0] PCF,
     output logic [31:0] PCPlus4F,
@@ -70,6 +72,8 @@ module riscv_core (
     logic       ALUSrcD;
     logic       ALUASrcD;
     logic [2:0] ImmSrcD;
+    logic       UsesRs1D;
+    logic       UsesRs2D;
 
     // Sinais ja registrados em M/W e expostos ao forwarding sem duplicar estado.
     logic       RegWriteM;
@@ -77,8 +81,8 @@ module riscv_core (
     logic       RegWriteW;
     logic [4:0] RdW;
 
-    // ForwardAE/BE e os flushes de JAL/JALR sao funcionais nesta etapa. Os
-    // stalls permanecem neutros ate o futuro tratamento de load-use.
+    // Forwarding, redirects e o stall classico de load-use sao combinacionais.
+    // PC e IF/ID param enquanto FlushE insere uma unica bolha no Execute.
     logic       StallF;
     logic       StallD;
     logic       FlushD;
@@ -101,6 +105,8 @@ module riscv_core (
         .LoadAccessValidM(LoadAccessValidM),
         .LoadEnableM  (LoadEnableM),
         .LoadDataM    (LoadDataM),
+        .StoreWriteDataM(StoreWriteDataM),
+        .Rs2M          (Rs2M),
         .RegWriteM    (RegWriteM),
         .RdM          (RdM),
         .RegWriteW    (RegWriteW),
@@ -188,7 +194,9 @@ module riscv_core (
         .ALUControlD (ALUControlD),
         .ALUSrcD     (ALUSrcD),
         .ALUASrcD    (ALUASrcD),
-        .ImmSrcD     (ImmSrcD)
+        .ImmSrcD     (ImmSrcD),
+        .UsesRs1D    (UsesRs1D),
+        .UsesRs2D    (UsesRs2D)
     );
 
     // A hazard_unit compara as fontes em E com M/W e usa PCSrcE para limpar
@@ -198,6 +206,9 @@ module riscv_core (
         .reset     (reset),
         .Rs1D      (Rs1D),
         .Rs2D      (Rs2D),
+        .UsesRs1D  (UsesRs1D),
+        .UsesRs2D  (UsesRs2D),
+        .MemWriteD (MemWriteD),
         .Rs1E      (Rs1E),
         .Rs2E      (Rs2E),
         .RdE       (RdE),

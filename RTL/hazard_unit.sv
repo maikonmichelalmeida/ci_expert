@@ -5,6 +5,9 @@ module hazard_unit (
     input  logic reset,
     input  logic [4:0] Rs1D,
     input  logic [4:0] Rs2D,
+    input  logic       UsesRs1D,
+    input  logic       UsesRs2D,
+    input  logic       MemWriteD,
     input  logic [4:0] Rs1E,
     input  logic [4:0] Rs2E,
     input  logic [4:0] RdE,
@@ -22,22 +25,44 @@ module hazard_unit (
     output logic [1:0] ForwardBE
 );
 
+    logic LoadE;
+    logic Rs1Hazard;
+    logic Rs2Hazard;
+    logic LoadUseHazard;
+
     always_comb begin
-        // 00 escolhe os valores originais do ID/EX. Os stalls continuam
-        // neutros porque load-use ainda nao pertence a esta etapa.
+        // 00 escolhe os valores originais do ID/EX. Todos os controles recebem
+        // defaults seguros antes das comparacoes de dependencia e redirect.
         StallF    = 1'b0;
         StallD    = 1'b0;
         FlushD    = 1'b0;
         FlushE    = 1'b0;
         ForwardAE = 2'b00;
         ForwardBE = 2'b00;
+        LoadE         = 1'b0;
+        Rs1Hazard     = 1'b0;
+        Rs2Hazard     = 1'b0;
+        LoadUseHazard = 1'b0;
 
         if (!reset) begin
+            // ResultSrcE=01 identifica o LOAD que ainda espera a leitura em MEM.
+            // STORE.rs2 fica fora do stall porque seu dado so e exigido em MEM
+            // e recebe o bypass tardio ResultW -> StoreWriteDataM.
+            LoadE         = (ResultSrcE == 2'b01);
+            Rs1Hazard     = UsesRs1D && (RdE != 5'b00000) && (RdE == Rs1D);
+            Rs2Hazard     = UsesRs2D && !MemWriteD &&
+                            (RdE != 5'b00000) && (RdE == Rs2D);
+            LoadUseHazard = LoadE && (Rs1Hazard || Rs2Hazard);
+
             // Quando um jump ou branch tomado chega a EX, descarta as duas
             // instrucoes mais jovens:
             // uma esta em Decode e a outra acaba de ser buscada pelo Fetch.
+            // O redirect vence um load-use: nao faz sentido manter uma
+            // instrucao que acabou de se tornar parte do caminho errado.
+            StallF = LoadUseHazard && !PCSrcE;
+            StallD = LoadUseHazard && !PCSrcE;
             FlushD = PCSrcE;
-            FlushE = PCSrcE;
+            FlushE = PCSrcE | LoadUseHazard;
 
             // EX/MEM tem prioridade porque guarda o resultado mais recente.
             // Rd=0 nunca encaminha: x0 deve continuar valendo zero.
@@ -53,7 +78,7 @@ module hazard_unit (
         end
     end
 
-    // Rs1D, Rs2D, RdE e ResultSrcE permanecem na interface para as futuras
-    // regras de load-use. PCSrcE ja produz o flush do primeiro hazard de controle.
+    // Um load-use segura PC/IF-ID por um ciclo e limpa o ID/EX. O LOAD continua
+    // para M/W; depois da bolha, o forwarding 01 entrega ResultW ao consumidor.
 
 endmodule

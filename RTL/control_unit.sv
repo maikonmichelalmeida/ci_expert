@@ -19,7 +19,9 @@ module control_unit (
     output logic [3:0] ALUControlD,
     output logic       ALUSrcD,
     output logic       ALUASrcD,
-    output logic [2:0] ImmSrcD
+    output logic [2:0] ImmSrcD,
+    output logic       UsesRs1D,
+    output logic       UsesRs2D
 );
 
     always_comb begin
@@ -38,6 +40,8 @@ module control_unit (
         ALUSrcD     = 1'b0;
         ALUASrcD    = 1'b0;
         ImmSrcD     = 3'b000;
+        UsesRs1D    = 1'b0;
+        UsesRs2D    = 1'b0;
 
         if (!reset) begin
             case (OpD)
@@ -229,6 +233,32 @@ module control_unit (
                 end
                 default: begin
                     // Outros opcodes conservam os defaults sem efeitos de escrita.
+                end
+            endcase
+
+            // InstrD sempre possui bits nas posicoes de rs1/rs2, mas nem todo
+            // formato usa esses campos. Os sinais abaixo descrevem somente as
+            // fontes arquiteturais de uma instrucao que o decoder julgou valida.
+            case (OpD)
+                7'b0110011: begin // OP
+                    UsesRs1D = RegWriteD;
+                    UsesRs2D = RegWriteD;
+                end
+                7'b0010011: UsesRs1D = RegWriteD; // OP-IMM
+                7'b0000011: UsesRs1D = RegWriteD &&
+                                        (ResultSrcD == 2'b01); // LOAD
+                7'b0100011: begin // STORE
+                    UsesRs1D = MemWriteD;
+                    UsesRs2D = MemWriteD;
+                end
+                7'b1100011: begin // BRANCH
+                    UsesRs1D = BranchD;
+                    UsesRs2D = BranchD;
+                end
+                7'b1100111: UsesRs1D = JalrD; // JALR
+                default: begin
+                    // LUI, AUIPC, JAL e instrucoes invalidas nao usam os
+                    // campos rs1/rs2, mesmo que seus bits coincidam com RdE.
                 end
             endcase
         end

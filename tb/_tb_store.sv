@@ -15,6 +15,7 @@ module tb_store;
     logic [2:0] sampled_control;
     logic [31:0] sampled_address;
     logic [31:0] sampled_write_data;
+    logic [31:0] sampled_store_write_data;
     logic [31:0] sampled_store_data;
     logic [3:0] sampled_wstrb;
     logic [3:0] expected_wstrb;
@@ -95,9 +96,18 @@ module tb_store;
         sampled_control   = dut.StoreControlM;
         sampled_address   = dut.ALUResultM;
         sampled_write_data = dut.WriteDataM;
+        sampled_store_write_data = dut.StoreWriteDataM;
         sampled_store_data = dut.StoreDataM;
         sampled_wstrb      = dut.StoreWStrbM;
         sampled_index      = dut.ALUResultM >> 2;
+
+        // Fora de uma dependencia WB -> STORE.rs2, o novo mux deve ser
+        // transparente e conservar exatamente o WriteDataM antigo.
+        if (!(dut.MemWriteM && dut.u_riscv_core.RegWriteW &&
+              (dut.u_riscv_core.RdW != 5'b00000) &&
+              (dut.u_riscv_core.RdW == dut.Rs2M)) &&
+            (sampled_store_write_data !== sampled_write_data))
+            $fatal(1, "FAIL: late STORE mux changed data without a WB match");
 
         if (!reset) begin
             expected_wstrb = 4'b0000;
@@ -107,17 +117,17 @@ module tb_store;
                 case (sampled_control)
                     3'b000: begin
                         expected_wstrb = 4'b0001 << sampled_address[1:0];
-                        expected_store_data = sampled_write_data <<
+                        expected_store_data = sampled_store_write_data <<
                                               {sampled_address[1:0], 3'b000};
                     end
                     3'b001: begin
                         expected_wstrb = 4'b0011 << sampled_address[1:0];
-                        expected_store_data = sampled_write_data <<
+                        expected_store_data = sampled_store_write_data <<
                                               {sampled_address[1:0], 3'b000};
                     end
                     3'b010: begin
                         expected_wstrb = 4'b1111;
-                        expected_store_data = sampled_write_data;
+                        expected_store_data = sampled_store_write_data;
                     end
                     default: $fatal(1, "FAIL: enabled reserved STORE type");
                 endcase

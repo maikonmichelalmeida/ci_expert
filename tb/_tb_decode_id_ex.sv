@@ -82,6 +82,8 @@ module tb_decode_id_ex;
     logic [31:0] PCTargetE;
     logic [2:0]  StoreControlM;
     logic [2:0]  LoadControlM;
+    logic [4:0]  Rs2M;
+    logic [31:0] StoreWriteDataM;
 
     datapath dut (
         .clk          (clk),
@@ -95,8 +97,10 @@ module tb_decode_id_ex;
         .LoadAccessValidM(),
         .LoadEnableM  (),
         .LoadDataM    (),
+        .StoreWriteDataM(StoreWriteDataM),
         .RegWriteM    (),
         .RdM          (),
+        .Rs2M         (Rs2M),
         .RegWriteW    (),
         .RdW          (),
         .InstrF       (InstrF),
@@ -221,7 +225,7 @@ module tb_decode_id_ex;
     endtask
 
     task automatic check_late_pipeline_transfer;
-        logic [110:0] expected_m;
+        logic [115:0] expected_m;
         logic [103:0] expected_w;
         begin
             @(negedge clk);
@@ -230,7 +234,7 @@ module tb_decode_id_ex;
             expected_m = {RegWriteE, ResultSrcE, MemWriteE, StoreControlE,
                           LoadControlE,
                           ALUResultE,
-                          WriteDataE, RdE, PCPlus4E};
+                          WriteDataE, RdE, Rs2E, PCPlus4E};
             expected_w = {dut.RegWriteM &&
                           ((dut.ResultSrcM != 2'b01) || dut.LoadAccessValidM),
                           dut.ResultSrcM, dut.ALUResultM,
@@ -240,7 +244,7 @@ module tb_decode_id_ex;
             if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, StoreControlM,
                  LoadControlM,
                  dut.ALUResultM,
-                 dut.WriteDataM, dut.RdM, dut.PCPlus4M} !== expected_m)
+                 dut.WriteDataM, dut.RdM, Rs2M, dut.PCPlus4M} !== expected_m)
                 $fatal(1, "FAIL EX/MEM: fields did not travel together");
             if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
                  dut.RdW, dut.PCPlus4W} !== expected_w)
@@ -253,8 +257,8 @@ module tb_decode_id_ex;
         begin
             if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, StoreControlM,
                  LoadControlM,
-                 dut.ALUResultM, dut.WriteDataM, dut.RdM,
-                 dut.PCPlus4M} !== 111'b0)
+                 dut.ALUResultM, dut.WriteDataM, dut.RdM, Rs2M,
+                 dut.PCPlus4M} !== 116'b0)
                 $fatal(1, "FAIL reset: EX/MEM was not cleared");
             if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
                  dut.RdW, dut.PCPlus4W} !== 104'b0)
