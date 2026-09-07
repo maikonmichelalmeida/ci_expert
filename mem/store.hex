@@ -1,0 +1,53 @@
+10000313 // addi x6,x0,256
+00032023 // sw   x0,0(x6): inicializa 0x100
+01100293 // addi x5,x0,0x11
+00530023 // sb   x5,0(x6)
+02200293 // addi x5,x0,0x22
+005300a3 // sb   x5,1(x6)
+03300293 // addi x5,x0,0x33
+00530123 // sb   x5,2(x6)
+04400293 // addi x5,x0,0x44
+005301a3 // sb   x5,3(x6)
+00032223 // sw   x0,4(x6): inicializa 0x104
+000012b7 // lui  x5,1
+12228293 // addi x5,x5,0x122: x5=0x1122
+00531223 // sh   x5,4(x6)
+000032b7 // lui  x5,3
+34428293 // addi x5,x5,0x344: x5=0x3344
+00531323 // sh   x5,6(x6)
+deadc2b7 // lui  x5,0xdeadc
+bef28293 // addi x5,x5,-1041: x5=0xdeadbeef
+00532423 // sw   x5,8(x6)
+00532623 // sw   x5,12(x6): offset positivo
+00032823 // sw   x0,16(x6): x0 como dado
+00502023 // sw   x5,0(x0): x0 como base
+00001137 // lui  x2,1
+80010113 // addi x2,x2,-2048: sp=0x800
+fe512e23 // sw   x5,-4(x2): endereco 0x7fc
+05a00293 // addi x5,x0,0x5a
+12000313 // addi x6,x0,0x120
+00532023 // sw   x5,0(x6): forwarding duplo
+00100293 // addi x5,x0,1
+00200293 // addi x5,x0,2
+12502223 // sw   x5,292(x0): prioridade M sobre W
+12800393 // addi x7,x0,0x128
+00000493 // addi x9,x0,0: independente
+00000493 // addi x9,x0,0: independente
+0053a023 // sw   x5,0(x7): bypass WB para Decode
+12002823 // sw   x0,304(x0): inicializa 0x130
+00000663 // beq  x0,x0,+12
+12502823 // sw   x5,304(x0): wrong-path
+00900513 // addi x10,x0,9: wrong-path
+12002a23 // sw   x0,308(x0): target
+12502c23 // sw   x5,312(x0): inicializa 0x138
+12501ca3 // sh   x5,313(x0): desalinhado, suprimido
+12502d23 // sw   x5,314(x0): desalinhado, suprimido
+12002e23 // sw   x0,316(x0): inicializa 0x13c
+12503e23 // STORE com funct3=011 invalido
+12507e23 // STORE com funct3=111 invalido
+07b00f93 // addi x31,x0,123
+00530fa3 // sb   x5,31(x6): bits Instr[11:7]=x31 nao sao rd
+00000013 // nop
+00000013 // nop
+00000013 // nop
+00000013 // nop

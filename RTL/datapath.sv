@@ -16,6 +16,7 @@ module datapath (
     input  logic        RegWriteD,
     input  logic [1:0]  ResultSrcD,
     input  logic        MemWriteD,
+    input  logic [2:0]  StoreControlD,
     input  logic        JumpD,
     input  logic        JalrD,
     input  logic        BranchD,
@@ -77,6 +78,7 @@ module datapath (
     output logic        RegWriteE,
     output logic [1:0]  ResultSrcE,
     output logic        MemWriteE,
+    output logic [2:0]  StoreControlE,
     output logic        JumpE,
     output logic        JalrE,
     output logic        BranchE,
@@ -96,6 +98,7 @@ module datapath (
     output logic [31:0] ALUResultM,
     output logic [31:0] WriteDataM,
     output logic        MemWriteM,
+    output logic [2:0]  StoreControlM,
     output logic        RegWriteM,
     output logic [4:0]  RdM,
 
@@ -246,6 +249,7 @@ module datapath (
             RegWriteE   <= 1'b0;
             ResultSrcE  <= 2'b00;
             MemWriteE   <= 1'b0;
+            StoreControlE <= 3'b000;
             JumpE       <= 1'b0;
             JalrE       <= 1'b0;
             BranchE     <= 1'b0;
@@ -265,6 +269,7 @@ module datapath (
             RegWriteE   <= RegWriteD;
             ResultSrcE  <= ResultSrcD;
             MemWriteE   <= MemWriteD;
+            StoreControlE <= StoreControlD;
             JumpE       <= JumpD;
             JalrE       <= JalrD;
             BranchE     <= BranchD;
@@ -358,6 +363,7 @@ module datapath (
             RegWriteM  <= 1'b0;
             ResultSrcM <= 2'b00;
             MemWriteM  <= 1'b0;
+            StoreControlM <= 3'b000;
             ALUResultM <= 32'b0;
             WriteDataM <= 32'b0;
             RdM        <= 5'b0;
@@ -366,6 +372,7 @@ module datapath (
             RegWriteM  <= RegWriteE;
             ResultSrcM <= ResultSrcE;
             MemWriteM  <= MemWriteE;
+            StoreControlM <= StoreControlE;
             ALUResultM <= ALUResultE;
             WriteDataM <= WriteDataE;
             RdM        <= RdE;

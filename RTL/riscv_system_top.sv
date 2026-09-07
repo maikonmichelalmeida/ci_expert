@@ -7,11 +7,17 @@ module riscv_system_top #(
     input  logic reset
 );
 
-    // Ligacoes estruturais com MEM. A DMEM permanece desabilitada ate a LSU.
+    // Ligacoes estruturais com MEM. STORE usa os sinais classicos do EX/MEM;
+    // LOAD continua pendente e ReadDataM ainda nao produz resultado funcional.
     logic [31:0] ReadDataM;
     logic [31:0] ALUResultM;
     logic [31:0] WriteDataM;
     logic        MemWriteM;
+    logic [2:0]  StoreControlM;
+    logic [31:0] StoreDataM;
+    logic [3:0]  StoreWStrbM;
+    logic        StoreEnableM;
+    logic [4:0]  StoreShiftAmountM;
 
     // Estes nomes reproduzem o caminho do diagrama. O sufixo F identifica
     // sinais do estagio Fetch; o sufixo D identifica o estagio Decode.
@@ -46,6 +52,7 @@ module riscv_system_top #(
     logic        RegWriteE;
     logic [1:0]  ResultSrcE;
     logic        MemWriteE;
+    logic [2:0]  StoreControlE;
     logic        JumpE;
     logic        JalrE;
     logic        BranchE;
@@ -84,6 +91,7 @@ module riscv_system_top #(
         .ALUResultM   (ALUResultM),
         .WriteDataM   (WriteDataM),
         .MemWriteM    (MemWriteM),
+        .StoreControlM(StoreControlM),
         .InstrF       (InstrF),
         .PCF          (PCF),
         .PCPlus4F     (PCPlus4F),
@@ -110,6 +118,7 @@ module riscv_system_top #(
         .RegWriteE    (RegWriteE),
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
+        .StoreControlE(StoreControlE),
         .JumpE        (JumpE),
         .JalrE        (JalrE),
         .BranchE      (BranchE),
@@ -125,15 +134,57 @@ module riscv_system_top #(
         .PCTargetE    (PCTargetE)
     );
 
-    // Endereco e dado ja vem do EX/MEM. MemWriteM e zero para OP/OP-IMM e ainda
-    // nao gera strobes: en/wstrb continuam inativos ate existir a futura LSU.
-    // ReadDataM segue ao MEM/WB, mas LOAD exigira tratar a latencia sincrona.
+    // Cada unidade em ALUResultM[1:0] representa um byte dentro da palavra.
+    // A concatenacao converte 0/1/2/3 em deslocamentos de 0/8/16/24 bits sem
+    // usar multiplicador: por exemplo, 2'b10 vira 5'b10000, isto e, 16.
+    assign StoreShiftAmountM = {ALUResultM[1:0], 3'b000};
+
+    // Pequeno adaptador entre o pipeline e os quatro byte lanes da DMEM.
+    // WriteDataM continua sendo o rs2 integral do diagrama; somente StoreDataM
+    // desloca os bytes ate as lanes fisicas selecionadas por StoreWStrbM.
+    always_comb begin
+        StoreDataM   = 32'b0;
+        StoreWStrbM  = 4'b0000;
+        StoreEnableM = 1'b0;
+
+        if (MemWriteM) begin
+            case (StoreControlM)
+                3'b000: begin // SB aceita qualquer byte da palavra.
+                    StoreDataM   = WriteDataM << StoreShiftAmountM;
+                    StoreWStrbM  = 4'b0001 << ALUResultM[1:0];
+                    StoreEnableM = 1'b1;
+                end
+                3'b001: begin // SH aceita somente enderecos pares.
+                    if (ALUResultM[0] == 1'b0) begin
+                        StoreDataM   = WriteDataM << StoreShiftAmountM;
+                        StoreWStrbM  = 4'b0011 << ALUResultM[1:0];
+                        StoreEnableM = 1'b1;
+                    end
+                end
+                3'b010: begin // SW aceita somente multiplos de quatro.
+                    if (ALUResultM[1:0] == 2'b00) begin
+                        StoreDataM   = WriteDataM;
+                        StoreWStrbM  = 4'b1111;
+                        StoreEnableM = 1'b1;
+                    end
+                end
+                default: begin
+                    // Misaligned store exception ainda nao existe. Tipos
+                    // reservados e SH/SW desalinhados sao suprimidos acima.
+                end
+            endcase
+        end
+    end
+
+    // A DMEM continua generica: recebe endereco, dado alinhado e byte enables,
+    // sem conhecer opcode ou funct3. Sua escrita permanece no posedge.
+    // LOAD ainda exigira generalizar o enable e tratar a leitura sincrona.
     data_memory u_data_memory (
         .clk   (clk),
-        .en    (1'b0),
+        .en    (StoreEnableM),
         .addr  (ALUResultM),
-        .wdata (WriteDataM),
-        .wstrb (4'b0),
+        .wdata (StoreDataM),
+        .wstrb (StoreWStrbM),
         .rdata (ReadDataM)
     );
 

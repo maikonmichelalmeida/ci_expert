@@ -19,6 +19,7 @@ module tb_decode_id_ex;
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
+    logic [2:0] StoreControlD;
     logic       JumpD;
     logic       JalrD;
     logic       BranchD;
@@ -63,6 +64,7 @@ module tb_decode_id_ex;
     logic        RegWriteE;
     logic [1:0]  ResultSrcE;
     logic        MemWriteE;
+    logic [2:0]  StoreControlE;
     logic        JumpE;
     logic        JalrE;
     logic        BranchE;
@@ -76,6 +78,7 @@ module tb_decode_id_ex;
     logic [31:0] ALUResultE;
     logic        ZeroE;
     logic [31:0] PCTargetE;
+    logic [2:0]  StoreControlM;
 
     datapath dut (
         .clk          (clk),
@@ -84,6 +87,7 @@ module tb_decode_id_ex;
         .ALUResultM   (),
         .WriteDataM   (),
         .MemWriteM    (),
+        .StoreControlM(StoreControlM),
         .RegWriteM    (),
         .RdM          (),
         .RegWriteW    (),
@@ -92,6 +96,7 @@ module tb_decode_id_ex;
         .RegWriteD    (RegWriteD),
         .ResultSrcD   (ResultSrcD),
         .MemWriteD    (MemWriteD),
+        .StoreControlD(StoreControlD),
         .JumpD        (JumpD),
         .JalrD        (JalrD),
         .BranchD      (BranchD),
@@ -133,6 +138,7 @@ module tb_decode_id_ex;
         .RegWriteE    (RegWriteE),
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
+        .StoreControlE(StoreControlE),
         .JumpE        (JumpE),
         .JalrE        (JalrE),
         .BranchE      (BranchE),
@@ -172,6 +178,7 @@ module tb_decode_id_ex;
             RegWriteD   = 1'b0;
             ResultSrcD  = 2'b00;
             MemWriteD   = 1'b0;
+            StoreControlD = 3'b000;
             JumpD       = 1'b0;
             JalrD       = 1'b0;
             BranchD     = 1'b0;
@@ -204,19 +211,21 @@ module tb_decode_id_ex;
     endtask
 
     task automatic check_late_pipeline_transfer;
-        logic [104:0] expected_m;
+        logic [107:0] expected_m;
         logic [103:0] expected_w;
         begin
             @(negedge clk);
             // Fotografias das entradas ANTES do clock; depois do clock o
             // estagio anterior ja pode conter outra instrucao.
-            expected_m = {RegWriteE, ResultSrcE, MemWriteE, ALUResultE,
+            expected_m = {RegWriteE, ResultSrcE, MemWriteE, StoreControlE,
+                          ALUResultE,
                           WriteDataE, RdE, PCPlus4E};
             expected_w = {dut.RegWriteM, dut.ResultSrcM, dut.ALUResultM,
                           ReadDataM, dut.RdM, dut.PCPlus4M};
             @(posedge clk);
             #1;
-            if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, dut.ALUResultM,
+            if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, StoreControlM,
+                 dut.ALUResultM,
                  dut.WriteDataM, dut.RdM, dut.PCPlus4M} !== expected_m)
                 $fatal(1, "FAIL EX/MEM: fields did not travel together");
             if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
@@ -228,8 +237,9 @@ module tb_decode_id_ex;
 
     task automatic check_late_pipeline_reset;
         begin
-            if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, dut.ALUResultM,
-                 dut.WriteDataM, dut.RdM, dut.PCPlus4M} !== 105'b0)
+            if ({dut.RegWriteM, dut.ResultSrcM, dut.MemWriteM, StoreControlM,
+                 dut.ALUResultM, dut.WriteDataM, dut.RdM,
+                 dut.PCPlus4M} !== 108'b0)
                 $fatal(1, "FAIL reset: EX/MEM was not cleared");
             if ({dut.RegWriteW, dut.ResultSrcW, dut.ALUResultW, dut.ReadDataW,
                  dut.RdW, dut.PCPlus4W} !== 104'b0)
@@ -291,6 +301,7 @@ module tb_decode_id_ex;
                 (RegWriteE   !== RegWriteD)  ||
                 (ResultSrcE  !== ResultSrcD) ||
                 (MemWriteE   !== MemWriteD)  ||
+                (StoreControlE !== StoreControlD) ||
                 (JumpE       !== JumpD)      ||
                 (JalrE       !== JalrD)      ||
                 (BranchE     !== BranchD)    ||
@@ -313,6 +324,7 @@ module tb_decode_id_ex;
                 (ImmExtE     !== 32'b0) || (PCPlus4E   !== 32'b0) ||
                 (RegWriteE   !== 1'b0)  || (ResultSrcE !== 2'b00) ||
                 (MemWriteE   !== 1'b0)  || (JumpE      !== 1'b0)  ||
+                (StoreControlE !== 3'b000) ||
                 (JalrE       !== 1'b0)  ||
                 (BranchE     !== 1'b0)  || (dut.BranchControlE !== 3'b000) ||
                 (ALUControlE !== 4'b0000) ||
@@ -352,6 +364,7 @@ module tb_decode_id_ex;
         RegWriteD   = 1'b0;
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
+        StoreControlD = 3'b000;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;
@@ -385,6 +398,10 @@ module tb_decode_id_ex;
         // Cada instrucao abaixo exercita uma montagem diferente do Extend.
         check_immediate(32'hfff0_0093, IMM_I, 32'hffff_ffff, "I format -1");
         check_immediate(32'hfe20_ae23, IMM_S, 32'hffff_fffc, "S format -4");
+        check_immediate(32'h7e00_0fa3, IMM_S, 32'h0000_07ff,
+                        "S format +2047");
+        check_immediate(32'h8000_2023, IMM_S, 32'hffff_f800,
+                        "S format -2048");
         check_immediate(32'h0000_0463, IMM_B, 32'h0000_0008, "B format +8");
         check_immediate(32'h0100_006f, IMM_J, 32'h0000_0010, "J format +16");
         check_immediate(32'h0000_00b7, IMM_U, 32'h0000_0000, "U format 00000");
@@ -404,6 +421,7 @@ module tb_decode_id_ex;
         RegWriteD   = 1'b1;
         ResultSrcD  = 2'b10;
         MemWriteD   = 1'b1;
+        StoreControlD = 3'b110;
         JumpD       = 1'b1;
         JalrD       = 1'b1;
         BranchD     = 1'b1;
@@ -456,6 +474,7 @@ module tb_decode_id_ex;
         RegWriteD   = 1'b0;
         ResultSrcD  = 2'b00;
         MemWriteD   = 1'b0;
+        StoreControlD = 3'b000;
         JumpD       = 1'b0;
         JalrD       = 1'b0;
         BranchD     = 1'b0;

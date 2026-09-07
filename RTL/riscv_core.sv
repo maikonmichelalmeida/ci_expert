@@ -7,6 +7,7 @@ module riscv_core (
     output logic [31:0] ALUResultM,
     output logic [31:0] WriteDataM,
     output logic        MemWriteM,
+    output logic [2:0]  StoreControlM,
     input  logic [31:0] InstrF,
     output logic [31:0] PCF,
     output logic [31:0] PCPlus4F,
@@ -33,6 +34,7 @@ module riscv_core (
     output logic        RegWriteE,
     output logic [1:0]  ResultSrcE,
     output logic        MemWriteE,
+    output logic [2:0]  StoreControlE,
     output logic        JumpE,
     output logic        JalrE,
     output logic        BranchE,
@@ -48,11 +50,12 @@ module riscv_core (
     output logic [31:0] PCTargetE
 );
 
-    // Controles do estagio Decode. A control_unit reconhece OP-IMM, OP, LUI,
-    // AUIPC, JAL, JALR e os seis branches, com defaults seguros nos demais casos.
+    // Controles do estagio Decode. A control_unit reconhece OP-IMM, OP, STORE,
+    // LUI, AUIPC, JAL, JALR e branches, com defaults seguros nos demais casos.
     logic       RegWriteD;
     logic [1:0] ResultSrcD;
     logic       MemWriteD;
+    logic [2:0] StoreControlD;
     logic       JumpD;
     logic       JalrD;
     logic       BranchD;
@@ -87,6 +90,7 @@ module riscv_core (
         .ALUResultM   (ALUResultM),
         .WriteDataM   (WriteDataM),
         .MemWriteM    (MemWriteM),
+        .StoreControlM(StoreControlM),
         .RegWriteM    (RegWriteM),
         .RdM          (RdM),
         .RegWriteW    (RegWriteW),
@@ -95,6 +99,7 @@ module riscv_core (
         .RegWriteD    (RegWriteD),
         .ResultSrcD   (ResultSrcD),
         .MemWriteD    (MemWriteD),
+        .StoreControlD(StoreControlD),
         .JumpD        (JumpD),
         .JalrD        (JalrD),
         .BranchD      (BranchD),
@@ -136,6 +141,7 @@ module riscv_core (
         .RegWriteE    (RegWriteE),
         .ResultSrcE   (ResultSrcE),
         .MemWriteE    (MemWriteE),
+        .StoreControlE(StoreControlE),
         .JumpE        (JumpE),
         .JalrE        (JalrE),
         .BranchE      (BranchE),
@@ -161,6 +167,7 @@ module riscv_core (
         .RegWriteD   (RegWriteD),
         .ResultSrcD  (ResultSrcD),
         .MemWriteD   (MemWriteD),
+        .StoreControlD(StoreControlD),
         .JumpD       (JumpD),
         .JalrD       (JalrD),
         .BranchD     (BranchD),
