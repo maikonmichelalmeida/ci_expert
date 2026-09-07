@@ -1,4 +1,4 @@
-// Decodificacao das familias OP-IMM e OP do RV32I usando a ALU atual.
+// Decodificacao de OP-IMM, OP e JAL do RV32I.
 // E como se fosse o bloco que le opcode/funct e distribui comandos para ALU,
 // banco de registradores, memorias e registradores de pipeline.
 module control_unit (
@@ -122,6 +122,14 @@ module control_unit (
                         default: RegWriteD = 1'b0;
                     endcase
                 end
+                7'b1101111: begin // JAL: grava PC+4 e salta para PC+imediato J.
+                    RegWriteD  = 1'b1;
+                    ResultSrcD = 2'b10;
+                    JumpD      = 1'b1;
+                    ALUControlD = 4'b0000;
+                    ALUSrcD    = 1'b0;
+                    ImmSrcD    = 3'b011;
+                end
                 default: begin
                     // Outros opcodes conservam os defaults sem efeitos de escrita.
                 end
@@ -133,6 +141,8 @@ module control_unit (
     // imediato -1 chega como 0xffffffff antes da comparacao unsigned.
     // Nos shifts, a ALU usa somente B[4:0]; em OP, B recebe RD2E e, em OP-IMM,
     // recebe ImmExtE. Nao precisamos de outro caminho para o shift amount.
+    // O target de JAL nao usa a ALU: PCE + ImmExtE possui um somador proprio
+    // ja previsto no datapath. A ALU recebe controles neutros nessa instrucao.
     // O decoder recebe somente InstrD[30]. Assim, reconhece as codificacoes
     // RV32I usadas aqui, mas ainda nao valida todos os sete bits de funct7,
     // nao implementa a extensao M e nao gera trap de instrucao ilegal.

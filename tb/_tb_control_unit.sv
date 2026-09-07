@@ -71,6 +71,22 @@ module tb_control_unit;
         end
     endtask
 
+    task automatic check_jal;
+        begin
+            OpD = 7'b1101111;
+            // Estes campos pertencem ao imediato J e nao alteram o decode.
+            Funct3D = 3'b101;
+            Funct7b5D = 1'b1;
+            #1;
+            if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
+                (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
+                (BranchD !== 1'b0) || (ALUControlD !== 4'b0000) ||
+                (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011))
+                $fatal(1, "FAIL JAL control signals");
+            $display("PASS: JAL control signals");
+        end
+    endtask
+
     initial begin
         reset = 1'b0;
         // Tabela esperada para bit30=0, na ordem dos oito valores de funct3.
@@ -103,9 +119,10 @@ module tb_control_unit;
         check_op(3'b101, 1'b1, 4'b1001, "SRA");
         check_op(3'b110, 1'b0, 4'b0011, "OR");
         check_op(3'b111, 1'b0, 4'b0010, "AND");
+        check_jal();
 
         // Todas as 128 x 8 combinacoes de opcode/funct3, com bit 30 em 0 e 1.
-        // OP-IMM e OP sao os unicos opcodes ativos neste checkpoint.
+        // OP-IMM, OP e JAL sao os unicos opcodes ativos neste checkpoint.
         for (integer op = 0; op < 128; op = op + 1) begin
             for (integer f3 = 0; f3 < 8; f3 = f3 + 1) begin
                 for (integer bit30 = 0; bit30 < 2; bit30 = bit30 + 1) begin
@@ -113,7 +130,13 @@ module tb_control_unit;
                     Funct3D = f3[2:0];
                     Funct7b5D = bit30[0];
                     #1;
-                    if (op == 19) begin
+                    if (op == 111) begin
+                        if ((RegWriteD !== 1'b1) || (ResultSrcD !== 2'b10) ||
+                            (MemWriteD !== 1'b0) || (JumpD !== 1'b1) ||
+                            (BranchD !== 1'b0) || (ALUControlD !== 4'b0000) ||
+                            (ALUSrcD !== 1'b0) || (ImmSrcD !== 3'b011))
+                            $fatal(1, "FAIL exhaustive JAL decoder");
+                    end else if (op == 19) begin
                         if ((f3 == 1) && (bit30 == 1))
                             check_control(1'b0, 1'b0, 4'b0000);
                         else if ((f3 == 5) && (bit30 == 1))
@@ -134,7 +157,7 @@ module tb_control_unit;
                 end
             end
         end
-        $display("PASS: 2048 decoder combinations for OP-IMM, OP and safe defaults");
+        $display("PASS: 2048 decoder combinations for OP-IMM, OP, JAL and safe defaults");
 
         // Reset deve apagar tambem um controle nao nulo, como SRAI=1001.
         check_op_imm(3'b101, 1'b1, 4'b1001, "SRAI before reset");

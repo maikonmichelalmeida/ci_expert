@@ -62,8 +62,8 @@ module riscv_core (
     logic       RegWriteW;
     logic [4:0] RdW;
 
-    // Somente ForwardAE/BE sao funcionais nesta etapa; stalls e flushes
-    // permanecem neutros ate os futuros riscos de load-use e controle.
+    // ForwardAE/BE e os flushes de JAL sao funcionais nesta etapa. Os stalls
+    // permanecem neutros ate o futuro tratamento de load-use.
     logic       StallF;
     logic       StallD;
     logic       FlushD;
@@ -156,8 +156,8 @@ module riscv_core (
         .ImmSrcD     (ImmSrcD)
     );
 
-    // A hazard_unit compara as fontes em E com os destinos em M/W. EX/MEM
-    // possui prioridade por conter o resultado arquitetural mais recente.
+    // A hazard_unit compara as fontes em E com M/W e usa PCSrcE para limpar
+    // as instrucoes mais jovens quando um JAL e resolvido no Execute.
     hazard_unit u_hazard_unit (
         .clk       (clk),
         .reset     (reset),

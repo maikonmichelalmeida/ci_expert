@@ -60,12 +60,13 @@ module tb_hazard_unit;
         RegWriteM = 1'b1;
         RdW = 5'd6;
         RegWriteW = 1'b1;
-        PCSrcE = 1'b0;
+        PCSrcE = 1'b1;
         ResultSrcE = 2'b00;
 
         check_forwarding(2'b00, 2'b00, "reset keeps forwarding safe");
 
         reset = 1'b0;
+        PCSrcE = 1'b0;
         RdM = 5'd10;
         RdW = 5'd11;
         check_forwarding(2'b00, 2'b00, "no register match");
@@ -122,7 +123,24 @@ module tb_hazard_unit;
         RegWriteW = 1'b1;
         check_forwarding(2'b01, 2'b00, "disabled M falls back to valid W");
 
-        $display("PASS: hazard_unit forwarding tests completed; stalls/flushes inactive");
+        // O redirect de JAL limpa IF/ID e ID/EX, sem ativar nenhum stall.
+        Rs1E = 5'd1;
+        Rs2E = 5'd2;
+        RdM = 5'd10;
+        RdW = 5'd11;
+        RegWriteM = 1'b1;
+        RegWriteW = 1'b1;
+        PCSrcE = 1'b1;
+        #1;
+        if ((ForwardAE !== 2'b00) || (ForwardBE !== 2'b00) ||
+            {StallF, StallD} !== 2'b00 || {FlushD, FlushE} !== 2'b11)
+            $fatal(1, "FAIL: JAL control flush");
+        $display("PASS: PCSrcE flushes Decode and Execute without stalls");
+
+        PCSrcE = 1'b0;
+        check_forwarding(2'b00, 2'b00, "flush returns to zero after redirect");
+
+        $display("PASS: hazard_unit forwarding and JAL flush tests completed");
         $finish;
     end
 endmodule

@@ -1,5 +1,5 @@
 // Detector de dependencias do pipeline.
-// Neste checkpoint somente o forwarding e funcional; stalls e flushes ficam zero.
+// Forwarding e flush de JAL sao funcionais; os stalls continuam inativos.
 module hazard_unit (
     input  logic clk,
     input  logic reset,
@@ -23,8 +23,8 @@ module hazard_unit (
 );
 
     always_comb begin
-        // 00 escolhe os valores originais do ID/EX. Stall e flush continuam
-        // neutros porque load-use e riscos de controle ainda nao pertencem a etapa.
+        // 00 escolhe os valores originais do ID/EX. Os stalls continuam
+        // neutros porque load-use ainda nao pertence a esta etapa.
         StallF    = 1'b0;
         StallD    = 1'b0;
         FlushD    = 1'b0;
@@ -33,6 +33,11 @@ module hazard_unit (
         ForwardBE = 2'b00;
 
         if (!reset) begin
+            // Quando JAL chega a EX, descarta as duas instrucoes mais jovens:
+            // uma esta em Decode e a outra acaba de ser buscada pelo Fetch.
+            FlushD = PCSrcE;
+            FlushE = PCSrcE;
+
             // EX/MEM tem prioridade porque guarda o resultado mais recente.
             // Rd=0 nunca encaminha: x0 deve continuar valendo zero.
             if (RegWriteM && (RdM != 5'b00000) && (RdM == Rs1E))
@@ -47,7 +52,7 @@ module hazard_unit (
         end
     end
 
-    // Rs1D, Rs2D, RdE, PCSrcE e ResultSrcE permanecem na interface para as
-    // futuras regras de load-use e controle. Eles ainda nao geram stall/flush.
+    // Rs1D, Rs2D, RdE e ResultSrcE permanecem na interface para as futuras
+    // regras de load-use. PCSrcE ja produz o flush do primeiro hazard de controle.
 
 endmodule

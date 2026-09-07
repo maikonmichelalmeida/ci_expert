@@ -127,9 +127,9 @@ module datapath (
     logic        CarryE;
     logic        OverflowE;
 
-    // Branch e jump ainda nao sao funcionais. Zero sempre escolhe PCPlus4F.
-    // StallF, por outro lado, ja vem da hazard_unit pela conexao definitiva.
-    assign PCSrcE = 1'b0;
+    // JAL e resolvido no Execute. JumpE seleciona PCTargetE no mux do PC;
+    // branches continuam inativos porque ainda nao entram nesta expressao.
+    assign PCSrcE = JumpE;
 
     // O submodulo pc implementa o registrador PCF, o somador PC+4 e o mux
     // PCNextF. O datapath apenas transporta esses sinais entre os estagios.
@@ -263,8 +263,7 @@ module datapath (
     // OP-IMM continua usando ImmExtE na ALU, mesmo se ForwardBE estiver ativo.
     assign SrcBE = ALUSrcE ? ImmExtE : WriteDataE;
 
-    // O somador de alvo ja ocupa seu lugar no Execute, mas PCSrcE permanece
-    // zero. Portanto PCTargetE ainda nao redireciona o PC nesta etapa.
+    // JAL usa exatamente o somador PC-relative previsto no diagrama.
     assign PCTargetE = PCE + ImmExtE;
 
     // A ALU agora pertence ao caminho real do pipeline. ALUControlE possui os
@@ -325,8 +324,8 @@ module datapath (
     end
 
     // Mux final do diagrama: 00 retorna a ALU, 01 a memoria e 10 o PC+4.
-    // Apenas 00 e escolhido pelo decoder OP/OP-IMM. As outras fontes ficam
-    // preparadas estruturalmente; 11 (reservado) devolve zero.
+    // OP/OP-IMM escolhem 00 e JAL escolhe 10 para gravar PC+4 em rd.
+    // A entrada 01 permanece preparada para LOAD; 11 devolve zero.
     always_comb begin
         ResultW = 32'b0;
         case (ResultSrcW)
