@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 
 // Todas as instrucoes vem da IMEM e escrevem pelo WB real. Os produtores
-// possuem quatro NOPs antes dos consumidores: nenhum forwarding e necessario.
+// possuem quatro NOPs antes dos consumidores: forwarding em A nao e necessario.
 module tb_op_imm;
     localparam integer PROGRAM_WORDS = 27;
     localparam integer USEFUL_INSTRUCTIONS = 19;
@@ -197,17 +197,20 @@ module tb_op_imm;
             if ((cycle >= 3) && (cycle - 3 < PROGRAM_WORDS)) check_memory(cycle - 3);
 
             if ({dut.u_riscv_core.StallF, dut.u_riscv_core.StallD,
-                 dut.u_riscv_core.FlushD, dut.u_riscv_core.FlushE,
-                 dut.u_riscv_core.ForwardAE, dut.u_riscv_core.ForwardBE} !== 8'b0)
-                $fatal(1, "FAIL: hazard_unit must stay neutral");
+                 dut.u_riscv_core.FlushD, dut.u_riscv_core.FlushE} !== 4'b0)
+                $fatal(1, "FAIL: stall/flush must stay neutral");
+            // Os bits de imediato tambem ocupam a posicao de Rs2E. Por isso
+            // ForwardBE pode mudar sem afetar SrcBE, que ALUSrcE mantem no imediato.
+            if (dut.u_riscv_core.ForwardAE !== 2'b00)
+                $fatal(1, "FAIL: unexpected forwarding on OP-IMM operand A");
             if ((dut.u_riscv_core.PCSrcE !== 1'b0) ||
-                (dut.SrcAE !== dut.RD1E) || (dut.WriteDataE !== dut.RD2E) ||
+                (dut.SrcAE !== dut.RD1E) ||
                 (dut.u_riscv_core.MemWriteD !== 1'b0) || (dut.MemWriteE !== 1'b0) ||
                 (dut.MemWriteM !== 1'b0) || (dut.u_data_memory.en !== 1'b0) ||
                 (dut.u_data_memory.wstrb !== 4'b0) ||
                 (dut.u_riscv_core.JumpD !== 1'b0) || (dut.u_riscv_core.BranchD !== 1'b0) ||
                 (dut.JumpE !== 1'b0) || (dut.BranchE !== 1'b0))
-                $fatal(1, "FAIL: unexpected forwarding, branch or memory control");
+                $fatal(1, "FAIL: unexpected branch or memory control");
         end
 
         for (integer i = 0; i < PROGRAM_WORDS; i = i + 1) begin
@@ -219,7 +222,7 @@ module tb_op_imm;
         if ((useful_writes != USEFUL_INSTRUCTIONS) ||
             (dut.RD1D !== 32'b0) || (dut.RD2D !== 32'b0))
             $fatal(1, "FAIL: missing writes or x0 protection");
-        $display("PASS: all 9 OP-IMM instructions and 19 useful WB writes; hazards/forwarding inactive");
+        $display("PASS: all 9 OP-IMM instructions and 19 useful WB writes; stalls/flushes inactive");
         $finish;
     end
 

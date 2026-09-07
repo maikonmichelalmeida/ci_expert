@@ -56,9 +56,14 @@ module riscv_core (
     logic       ALUSrcD;
     logic [2:0] ImmSrcD;
 
-    // Saidas estruturais da hazard_unit. StallF chega ao PC, StallD e FlushD
-    // chegam ao IF/ID, e FlushE chega ao ID/EX. As selecoes de forwarding ja
-    // possuem os nomes do diagrama, mas ainda nao comandam muxes funcionais.
+    // Sinais ja registrados em M/W e expostos ao forwarding sem duplicar estado.
+    logic       RegWriteM;
+    logic [4:0] RdM;
+    logic       RegWriteW;
+    logic [4:0] RdW;
+
+    // Somente ForwardAE/BE sao funcionais nesta etapa; stalls e flushes
+    // permanecem neutros ate os futuros riscos de load-use e controle.
     logic       StallF;
     logic       StallD;
     logic       FlushD;
@@ -76,6 +81,10 @@ module riscv_core (
         .ALUResultM   (ALUResultM),
         .WriteDataM   (WriteDataM),
         .MemWriteM    (MemWriteM),
+        .RegWriteM    (RegWriteM),
+        .RdM          (RdM),
+        .RegWriteW    (RegWriteW),
+        .RdW          (RdW),
         .InstrF       (InstrF),
         .RegWriteD    (RegWriteD),
         .ResultSrcD   (ResultSrcD),
@@ -147,8 +156,8 @@ module riscv_core (
         .ImmSrcD     (ImmSrcD)
     );
 
-    // A hazard_unit e a unica origem destes sinais. Por enquanto ela fornece
-    // apenas valores neutros, sem detectar dependencias ou fazer forwarding.
+    // A hazard_unit compara as fontes em E com os destinos em M/W. EX/MEM
+    // possui prioridade por conter o resultado arquitetural mais recente.
     hazard_unit u_hazard_unit (
         .clk       (clk),
         .reset     (reset),
@@ -157,6 +166,10 @@ module riscv_core (
         .Rs1E      (Rs1E),
         .Rs2E      (Rs2E),
         .RdE       (RdE),
+        .RdM       (RdM),
+        .RegWriteM (RegWriteM),
+        .RdW       (RdW),
+        .RegWriteW (RegWriteW),
         .PCSrcE    (PCSrcE),
         .ResultSrcE(ResultSrcE),
         .StallF    (StallF),

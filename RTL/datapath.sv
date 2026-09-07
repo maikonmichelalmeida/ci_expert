@@ -30,7 +30,7 @@ module datapath (
     input  logic        FlushD,
     input  logic        FlushE,
 
-    // -------- Controles reservados para forwarding --------
+    // ---------------- Controles dos muxes de forwarding ----------------
     input  logic [1:0]  ForwardAE,
     input  logic [1:0]  ForwardBE,
 
@@ -90,6 +90,12 @@ module datapath (
     output logic [31:0] ALUResultM,
     output logic [31:0] WriteDataM,
     output logic        MemWriteM,
+    output logic        RegWriteM,
+    output logic [4:0]  RdM,
+
+    // -------- MEM/WB PIPELINE REGISTER: sinais para forwarding --------
+    output logic        RegWriteW,
+    output logic [4:0]  RdW,
 
     // ---------------- Entrada do estagio MEM ----------------
     // A DMEM continua sincrona. Este fio prepara o caminho de dados de leitura,
@@ -100,19 +106,15 @@ module datapath (
     // -------- EX/MEM PIPELINE REGISTER: demais campos --------
     // Junto de ALUResultM, WriteDataM e MemWriteM, estes sinais formam
     // o grande registrador EX/MEM. Exemplo: resultado 1 e Rd=1 seguem juntos.
-    logic        RegWriteM;
     logic [1:0]  ResultSrcM;
-    logic [4:0]  RdM;
     logic [31:0] PCPlus4M;
 
     // ---------------- MEM/WB PIPELINE REGISTER ----------------
     // Resultado, destino e enable chegam juntos ao ultimo estagio.
     // RegWriteW=1 e RdW=1 autorizam gravar ResultW em x1 no proximo posedge.
-    logic        RegWriteW;
     logic [1:0]  ResultSrcW;
     logic [31:0] ALUResultW;
     logic [31:0] ReadDataW;
-    logic [4:0]  RdW;
     logic [31:0] PCPlus4W;
 
     // ---------------- Estagio Writeback (W) ----------------
@@ -235,15 +237,30 @@ module datapath (
         end
     end
 
-    // Caminho normal provisoriamente selecionado pelos futuros muxes de
-    // forwarding. Isto nao remove nem altera a arquitetura desses muxes:
-    // ForwardAE e ForwardBE continuam chegando ao datapath. ALUResultM e
-    // ResultW ja existem, mas so entrarao nesses muxes na etapa de forwarding.
-    assign SrcAE      = RD1E;
-    assign WriteDataE = RD2E;
+    // Os muxes escolhem o valor original (00), o WB (01) ou o resultado mais
+    // recente no EX/MEM (10). O codigo 11 e reservado e volta ao valor original.
+    always_comb begin
+        SrcAE = RD1E;
+        case (ForwardAE)
+            2'b00: SrcAE = RD1E;
+            2'b01: SrcAE = ResultW;
+            2'b10: SrcAE = ALUResultM;
+            default: SrcAE = RD1E;
+        endcase
+    end
 
-    // ALUSrcE forma o mux da segunda entrada da ALU. Zero usa o segundo dado
-    // do Register File; um usa o imediato ja registrado no ID/EX.
+    always_comb begin
+        WriteDataE = RD2E;
+        case (ForwardBE)
+            2'b00: WriteDataE = RD2E;
+            2'b01: WriteDataE = ResultW;
+            2'b10: WriteDataE = ALUResultM;
+            default: WriteDataE = RD2E;
+        endcase
+    end
+
+    // ForwardBE atua antes deste mux. Assim STORE podera usar WriteDataE e uma
+    // OP-IMM continua usando ImmExtE na ALU, mesmo se ForwardBE estiver ativo.
     assign SrcBE = ALUSrcE ? ImmExtE : WriteDataE;
 
     // O somador de alvo ja ocupa seu lugar no Execute, mas PCSrcE permanece
