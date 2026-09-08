@@ -23,13 +23,14 @@ VCS_FLAGS = $(VCS_COMMON_FLAGS) $(VCS_EXTRA_FLAGS) -f "$(FILELIST)" -o simv -l "
 
 GIT_REMOTE ?= origin
 GIT_BRANCH ?= main
+SYSTEM_TEST := rv32i_system_program
 
 # A lista e obtida dos filelists existentes. Um novo filelist_<nome>.f passa
 # automaticamente a aparecer no menu e na regressao completa.
 TEST_NAMES := $(sort $(patsubst filelist_%.f,%,$(notdir $(wildcard $(RUN_DIR)/filelist_*.f))))
 
 .PHONY: menu help tests show-config status update load check-filelist \
-        compile rebuild run regression log complog verdi clean \
+        compile rebuild run system regression log complog verdi clean \
         _compile _rebuild _run _regression _verdi
 
 # Os alvos publicos sincronizam o Git. O menu e a regressao usam os alvos com
@@ -49,10 +50,11 @@ menu: update
 >   echo "  7) Executar a regressao completa"; \
 >   echo "  8) Ver o estado do Git"; \
 >   echo "  9) Atualizar a branch pelo Git"; \
+>   echo "  S) Executar o programa RV32I end-to-end"; \
 >   echo " Enter) Sair"; \
 >   echo "============================================================"; \
 >   echo " Teste atual: $(if $(strip $(TEST)),$(TEST),default)"; \
->   if ! read -r -p "Escolha [1-9, Enter para sair]: " option; then echo; break; fi; \
+>   if ! read -r -p "Escolha [1-9, S, Enter para sair]: " option; then echo; break; fi; \
 >   option="$${option%$$'\r'}"; \
 >   case "$$option" in \
 >     1) $(MAKE) --no-print-directory _run TEST="$(TEST)";; \
@@ -76,6 +78,7 @@ menu: update
 >     7) $(MAKE) --no-print-directory _regression;; \
 >     8) $(MAKE) --no-print-directory status;; \
 >     9) $(MAKE) --no-print-directory update;; \
+>     s|S) $(MAKE) --no-print-directory _run TEST="$(SYSTEM_TEST)";; \
 >     "") break;; \
 >     *) echo "Opcao invalida.";; \
 >   esac; \
@@ -87,6 +90,7 @@ help:
 > @echo "  make                        Atualiza o Git e abre o menu"
 > @echo "  make run                    Compila e executa o teste default"
 > @echo "  make run TEST=alu           Compila e executa filelist_alu.f"
+> @echo "  make system                 Executa o programa RV32I end-to-end"
 > @echo "  make compile TEST=jalr      Somente compila o teste JALR"
 > @echo "  make regression             Executa o teste default e todos os testes nomeados"
 > @echo "  make verdi TEST=fetch       Abre a forma de onda do teste Fetch"
@@ -102,7 +106,13 @@ help:
 tests:
 > @echo "Teste default: filelist.f"
 > @echo "Testes nomeados:"
-> @for test in $(TEST_NAMES); do echo "  $$test"; done
+> @for test in $(TEST_NAMES); do \
+>   if [ "$$test" = "$(SYSTEM_TEST)" ]; then \
+>     echo "  $$test  [programa completo end-to-end]"; \
+>   else \
+>     echo "  $$test"; \
+>   fi; \
+> done
 
 show-config:
 > @echo "ROOT            = $(ROOT)"
@@ -154,6 +164,11 @@ run: update _run
 _run: _compile
 > @echo "Executando a simulacao; log em RUN/$(SIM_LOG)..."
 > @cd "$(RUN_DIR)" && bash -lc 'set -o pipefail; $(VCS_ENV); ./simv | tee "$(SIM_LOG)"; exit $${PIPESTATUS[0]}'
+
+# Atalho para a demonstracao completa. Ele reutiliza exatamente o fluxo normal
+# de compilacao/simulacao e, portanto, tambem gera logs com o nome do teste.
+system: update
+> @$(MAKE) --no-print-directory _run TEST="$(SYSTEM_TEST)"
 
 # Executa primeiro a integracao default e depois cada filelist_<teste>.f.
 # O primeiro erro interrompe a regressao e preserva o log que explica a falha.
