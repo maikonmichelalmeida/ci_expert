@@ -1,0 +1,195 @@
+RV32I SYSTEM PROGRAM
+====================
+
+OBJETIVO
+
+Este programa e uma prova de software do pipeline RV32I atual. Ele executa
+funcoes leaf e non-leaf, chamadas aninhadas, recursao, pilha, vetores, loops,
+ordenacao, busca, multiplicacao por somas, acessos byte/half/word, branches,
+hazards e forwarding. Nenhum arquivo RTL faz parte desta experiencia.
+
+ARQUIVOS E REGERACAO
+
+  sw/rv32i_system_program.c       referencia dos algoritmos
+  sw/rv32i_system_program.s       Assembly real, sem pseudoinstrucoes ocultas
+  mem/rv32i_system_program.hex   32 bits por linha, primeira linha no PC zero
+  mem/rv32i_system_program.map   labels e seus PCs
+  tb/_tb_rv32i_system_program.sv teste end-to-end
+  tools/gen_rv32i_system_program.js gerador e interpretador de referencia
+
+Para regerar os artefatos, na raiz do projeto:
+
+  node tools/gen_rv32i_system_program.js
+
+O gerador confere ranges signed de imediatos I/S/B/J, alinhamento dos desvios,
+labels, limite de 512 palavras e codifica somente as 37 instrucoes suportadas.
+Depois, um interpretador RV32I sequencial independente executa o HEX, verifica
+os resultados e exige cobertura das 37 instrucoes antes de gravar os arquivos.
+
+Para a validacao manual no servidor com VCS:
+
+  make run TEST=rv32i_system_program
+
+O testbench usa timeout de 5000 ciclos e encerra quando status em 0x1f0 deixa
+de ser zero. Ele nao inicializa a DMEM e nao escreve no Register File.
+
+TAMANHO DA IMEM
+
+  Palavras:       466 de 512
+  Bytes:          1864 de 2048
+  Ocupacao:       91,02%
+  Primeiro PC:    0x00000000
+  Ultimo PC:      0x00000744
+
+MAPA DA DMEM
+
+  0x100..0x10f  vetor A, criado pelo programa e depois ordenado
+  0x120..0x12f  vetor B, criado pelo programa e preservado
+  0x180         soma = 20
+  0x184         minimo = -3
+  0x188         maximo = 12
+  0x18c         busca por 12 = indice 3
+  0x190         busca por 5 = -1
+  0x194         produto escalar = 11
+  0x198         checksum dos 16 bytes = 13
+  0x19c         assinatura de branches = 0x0000003f
+  0x1a0         assinatura da ALU = 0xdffffed1
+  0x1a4         assinatura da memoria = 0x00000135
+  0x1a8         PC retornado por AUIPC = 0x000005d4
+  0x1ac         copia LOAD->STORE = 20
+  0x1b0..0x1b7  scratch dos testes de byte e halfword
+  0x1f0         status final; escrito por ultimo
+  0x1f4         codigo de erro
+  0x1f8         snapshot final de sp
+  0x700..0x7ff  pilha, crescendo para enderecos menores
+
+  PASS = 0x600d600d
+  FAIL = 0xbad0bad0
+
+CALL GRAPH
+
+  _start
+    main
+      run_suite
+        sum_array
+        minmax
+        dot_product
+          mul_signed
+            abs32
+        insertion_sort
+        binary_search_recursive
+          binary_search_recursive
+        checksum8
+        memory_probe
+        branch_probe
+        alu_probe
+        pc_probe
+      verify_results
+
+FRAMES E CONVENCAO
+
+  Funcao                    Tipo                 Frame  Valores salvos
+  main                      non-leaf             16 B   ra
+  run_suite                 non-leaf             16 B   ra
+  sum_array                 leaf                  0 B   nenhum
+  minmax                    leaf                  0 B   nenhum
+  dot_product               non-leaf             32 B   ra,s0,s1,s2,s3
+  mul_signed                non-leaf             32 B   ra,s0,s1,s2,s3
+  abs32                     leaf                  0 B   nenhum
+  insertion_sort            leaf                  0 B   nenhum
+  binary_search_recursive   non-leaf/recursive   32 B   ra,s0,s1,s2,s3
+  checksum8                 leaf                  0 B   nenhum
+  memory_probe              leaf                  0 B   nenhum
+  branch_probe              leaf                  0 B   nenhum
+  alu_probe                 leaf                  0 B   nenhum
+  pc_probe                  leaf                  0 B   nenhum
+  verify_results            leaf                  0 B   nenhum
+
+sp comeca em 0x800. As duas buscas chegam a tres ativacoes simultaneas da
+rotina recursiva; o menor sp previsto e 0x780. Todo epilogo restaura seu frame.
+
+C PARA ASSEMBLY
+
+  C: sum += v[i]
+  Assembly: LW busca o elemento e ADD acumula. ADDI avanca o ponteiro e reduz
+  o contador. A proximidade LW->ADD gera um load-use real, sem NOP de software.
+
+  C: product = mul_signed(a[i], b[i])
+  Assembly: LW prepara a0/a1, JAL salva PC+4 em ra, mul_signed chama abs32,
+  e o retorno em a0 e somado ao acumulador preservado em s3.
+
+  C: binary_search_recursive(v, next_lo, next_hi, target)
+  Assembly: a0..a3 recebem os quatro argumentos, JAL abre uma nova ativacao e
+  JALR x0,0(ra) retorna. Cada ativacao conserva seu proprio frame de 32 bytes.
+
+  C: v[j + 1] = v[j]
+  Assembly: SLLI converte indice em offset de bytes, ADD forma o endereco,
+  LW busca o valor e SW desloca o elemento. BLT faz a comparacao signed.
+
+COBERTURA INSTRUCAO -> USO
+
+  Instrucao  Funcao/trecho                 Uso funcional
+  ADDI       todo o programa               constantes, ponteiros e contadores
+  SLLI       insertion_sort/binary_search  indice de word multiplicado por 4
+  SLTI       alu_probe                     compara -16 com zero, signed
+  SLTIU      alu_probe                     compara os mesmos bits sem sinal
+  XORI       alu_probe                     mistura a assinatura
+  SRLI       alu_probe                     deslocamento logico de numero negativo
+  SRAI       binary_search/alu_probe       media e deslocamento aritmetico
+  ORI        branch_probe/alu_probe        monta assinaturas por bits
+  ANDI       alu_probe                     mascara os oito bits baixos
+  ADD        somas/endereco/dot_product    soma dados e forma enderecos
+  SUB        mul_signed/alu_probe          nega valores e testa subtracao
+  SLL        alu_probe                     shift variavel
+  SLT        mul_signed/alu_probe          sinais e comparacao signed
+  SLTU       alu_probe                     comparacao unsigned
+  XOR        checksum8/alu_probe           checksum e assinatura
+  SRL        alu_probe                     shift variavel logico
+  SRA        alu_probe                     shift variavel aritmetico
+  OR         alu_probe                     OR entre registradores
+  AND        alu_probe                     AND entre registradores
+  LB         memory_probe                  leitura de byte com sinal
+  LH         memory_probe                  leitura de halfword com sinal
+  LW         algoritmos e stack            dados, resultados e contexto
+  LBU        checksum8/memory_probe         bytes sem extensao de sinal
+  LHU        memory_probe                  halfword sem extensao de sinal
+  SB         memory_probe                  construcao de 0x80ff7f01 por lanes
+  SH         memory_probe                  construcao de 0x80017fff por metades
+  SW         vetores/resultados/stack      estado persistente e frames
+  BEQ        loops/branch_probe            igualdade e termino de loops
+  BNE        verificacoes/branch_probe     desigualdade e autoteste
+  BLT        minmax/sort/branch_probe      ordem signed
+  BGE        minmax/branch_probe           ordem signed complementar
+  BLTU       branch_probe                  -3 e maior que 7 sem sinal
+  BGEU       branch_probe                  comparacao unsigned complementar
+  LUI        _start/constantes             sp=0x800 e constantes de 32 bits
+  AUIPC      pc_probe                      captura o PC da propria instrucao
+  JAL        chamadas e loops              call, recursao e saltos diretos
+  JALR       epilogos                      retorno pelo ra salvo
+
+HAZARDS OBSERVADOS PELO TESTBENCH
+
+  - LW seguido de consumidor em EX, exigindo StallF/StallD/FlushE;
+  - LOAD seguido de STORE.rs2 sem stall e com bypass tardio WB->MEM;
+  - forwarding ALU de M e W para as entradas A e B;
+  - bypass WB->Decode em trecho marcado de alu_probe;
+  - redirects de JAL, JALR e branches tomados;
+  - branches tomados e nao tomados;
+  - escrita/leitura real da pilha e tres frames recursivos simultaneos.
+
+LITTLE-ENDIAN
+
+memory_probe escreve 01, 7f, ff e 80 nos enderecos consecutivos 0x1b0..0x1b3.
+A palavra fisica fica 0x80ff7f01. LB no ultimo byte resulta em 0xffffff80;
+LBU no mesmo endereco resulta em 0x00000080. Os SH em 0x1b4 e 0x1b6 formam
+0x80017fff e demonstram da mesma forma LH versus LHU.
+
+CODIGOS DE ERRO
+
+  1 sum; 2 minimo; 3 maximo; 4 vetor ordenado; 5 busca encontrada;
+  6 busca ausente; 7 dot product; 8 checksum; 9 branch probe;
+  10 ALU probe; 11 memory probe; 12 AUIPC; 13 stack;
+  14 vetor B; 15 copia LOAD->STORE.
+
+O status PASS e gravado somente depois de main retornar zero, sp voltar a
+0x800 e error ser zerado. Em falha, o codigo e publicado antes de FAIL.

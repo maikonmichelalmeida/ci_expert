@@ -1,0 +1,13 @@
++incdir+../tb
+../tb/_tb_rv32i_system_program.sv
+../RTL/riscv_system_top.sv
+../RTL/riscv_core.sv
+../RTL/datapath.sv
+../RTL/pc.sv
+../RTL/extend.sv
+../RTL/alu.sv
+../RTL/register_file.sv
+../RTL/control_unit.sv
+../RTL/hazard_unit.sv
+../RTL/instruction_memory.sv
+../RTL/data_memory.sv
