@@ -23,7 +23,7 @@ VCS_EXTRA_FLAGS ?=
 VCS_FLAGS = $(VCS_COMMON_FLAGS) $(VCS_EXTRA_FLAGS) -f "$(FILELIST)" -o simv -l "$(COMP_LOG)"
 
 DC_BIN ?= dc_shell
-DC_ENV ?= module load dc
+DC_ENV ?= module load designcompiler/W-2024.09-SP5-4
 DC_CHECK_TOP ?= riscv_system_top
 SYN_TOP ?= riscv_core
 CLOCK_PERIOD ?= 10.0
