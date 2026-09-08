@@ -6,6 +6,7 @@ SHELL := /bin/bash
 # funcionando mesmo quando o make e chamado de outro diretorio com -f.
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 RUN_DIR := $(ROOT)/RUN
+SYN_DIR := $(ROOT)/SYN
 
 TEST ?=
 FILELIST ?= $(if $(strip $(TEST)),filelist_$(TEST).f,filelist.f)
@@ -21,6 +22,13 @@ VCS_COMMON_FLAGS ?= -full64 -sverilog -debug_access+all +memcbk -kdb
 VCS_EXTRA_FLAGS ?=
 VCS_FLAGS = $(VCS_COMMON_FLAGS) $(VCS_EXTRA_FLAGS) -f "$(FILELIST)" -o simv -l "$(COMP_LOG)"
 
+DC_BIN ?= dc_shell
+DC_ENV ?= module load dc
+DC_CHECK_TOP ?= riscv_system_top
+SYN_TOP ?= riscv_core
+CLOCK_PERIOD ?= 10.0
+TARGET_LIBRARY ?=
+
 GIT_REMOTE ?= origin
 GIT_BRANCH ?= main
 SYSTEM_TEST := rv32i_system_program
@@ -31,7 +39,8 @@ TEST_NAMES := $(sort $(patsubst filelist_%.f,%,$(notdir $(wildcard $(RUN_DIR)/fi
 
 .PHONY: menu help tests show-config status update load check-filelist \
         compile rebuild run system regression log complog verdi clean \
-        _compile _rebuild _run _regression _verdi
+        dc-check synth clean-synth \
+        _compile _rebuild _run _regression _verdi _dc-check _synth
 
 # Os alvos publicos sincronizam o Git. O menu e a regressao usam os alvos com
 # prefixo "_" porque a sincronizacao ja foi feita no inicio do comando.
@@ -51,10 +60,11 @@ menu: update
 >   echo "  8) Ver o estado do Git"; \
 >   echo "  9) Atualizar a branch pelo Git"; \
 >   echo "  S) Executar o programa RV32I end-to-end"; \
+>   echo "  D) Verificar o RTL com DC NXT"; \
 >   echo " Enter) Sair"; \
 >   echo "============================================================"; \
 >   echo " Teste atual: $(if $(strip $(TEST)),$(TEST),default)"; \
->   if ! read -r -p "Escolha [1-9, S, Enter para sair]: " option; then echo; break; fi; \
+>   if ! read -r -p "Escolha [1-9, S, D, Enter para sair]: " option; then echo; break; fi; \
 >   option="$${option%$$'\r'}"; \
 >   case "$$option" in \
 >     1) $(MAKE) --no-print-directory _run TEST="$(TEST)";; \
@@ -79,6 +89,7 @@ menu: update
 >     8) $(MAKE) --no-print-directory status;; \
 >     9) $(MAKE) --no-print-directory update;; \
 >     s|S) $(MAKE) --no-print-directory _run TEST="$(SYSTEM_TEST)";; \
+>     d|D) $(MAKE) --no-print-directory _dc-check;; \
 >     "") break;; \
 >     *) echo "Opcao invalida.";; \
 >   esac; \
@@ -94,7 +105,11 @@ help:
 > @echo "  make compile TEST=jalr      Somente compila o teste JALR"
 > @echo "  make regression             Executa o teste default e todos os testes nomeados"
 > @echo "  make verdi TEST=fetch       Abre a forma de onda do teste Fetch"
+> @echo "  make dc-check               Le, elabora e verifica o sistema no DC NXT"
+> @echo "  make synth TARGET_LIBRARY=/caminho/celulas.db"
+> @echo "                              Sintetiza e mapeia o core usando a biblioteca"
 > @echo "  make clean                  Remove produtos gerados, preservando os logs"
+> @echo "  make clean-synth            Remove work, relatorios, saidas e logs do DC"
 > @echo "  make update                 Atualiza $(GIT_REMOTE)/$(GIT_BRANCH) manualmente"
 > @echo
 > @echo "Opcoes uteis:"
@@ -102,6 +117,10 @@ help:
 > @echo "  VCS_EXTRA_FLAGS='<flags>'   Acrescenta opcoes na compilacao"
 > @echo "  VCS_ENV='<comando>'         Ajusta o comando de preparacao do ambiente VCS"
 > @echo "  VERDI_ENV='<comando>'       Ajusta o comando de preparacao do ambiente Verdi"
+> @echo "  DC_ENV='<comando>'          Ajusta o module load do DC NXT"
+> @echo "  DC_CHECK_TOP=<modulo>       Top usado em dc-check"
+> @echo "  SYN_TOP=<modulo>            Top usado na sintese mapeada"
+> @echo "  CLOCK_PERIOD=<ns>           Periodo do clock; padrao 10.0 ns"
 
 tests:
 > @echo "Teste default: filelist.f"
@@ -117,6 +136,7 @@ tests:
 show-config:
 > @echo "ROOT            = $(ROOT)"
 > @echo "RUN_DIR         = $(RUN_DIR)"
+> @echo "SYN_DIR         = $(SYN_DIR)"
 > @echo "TEST            = $(if $(strip $(TEST)),$(TEST),default)"
 > @echo "FILELIST        = $(FILELIST)"
 > @echo "COMP_LOG        = $(COMP_LOG)"
@@ -124,6 +144,11 @@ show-config:
 > @echo "FSDB            = $(FSDB)"
 > @echo "VCS_COMMON_FLAGS= $(VCS_COMMON_FLAGS)"
 > @echo "VCS_EXTRA_FLAGS = $(VCS_EXTRA_FLAGS)"
+> @echo "DC_BIN          = $(DC_BIN)"
+> @echo "DC_CHECK_TOP    = $(DC_CHECK_TOP)"
+> @echo "SYN_TOP         = $(SYN_TOP)"
+> @echo "CLOCK_PERIOD    = $(CLOCK_PERIOD) ns"
+> @echo "TARGET_LIBRARY  = $(if $(strip $(TARGET_LIBRARY)),$(TARGET_LIBRARY),nao informada)"
 
 status:
 > @git -C "$(ROOT)" status -sb
@@ -169,6 +194,40 @@ _run: _compile
 # de compilacao/simulacao e, portanto, tambem gera logs com o nome do teste.
 system: update
 > @$(MAKE) --no-print-directory _run TEST="$(SYSTEM_TEST)"
+
+# dc-check usa o topo completo para confirmar leitura, elaboracao, hierarquia e
+# consistencia estrutural. Esta etapa nao precisa de biblioteca tecnologica.
+dc-check: update _dc-check
+
+_dc-check:
+> @mkdir -p "$(SYN_DIR)/logs" "$(SYN_DIR)/reports" \
+>             "$(SYN_DIR)/output" "$(SYN_DIR)/work"
+> @echo "Verificando $(DC_CHECK_TOP) com DC NXT..."
+> @cd "$(SYN_DIR)" && bash -lc 'set -o pipefail; $(DC_ENV); command -v $(DC_BIN) >/dev/null || { echo "Erro: $(DC_BIN) nao foi encontrado. Ajuste DC_ENV ou DC_BIN."; exit 1; }; export DC_MODE=check DC_TOP="$(DC_CHECK_TOP)" CLOCK_PERIOD="$(CLOCK_PERIOD)"; $(DC_BIN) -f dc_nxt.tcl | tee logs/dc_check.log; exit $${PIPESTATUS[0]}'
+
+# A etapa mapeada usa riscv_core por padrao, pois ele possui interfaces de
+# entrada/saida observaveis. A biblioteca .db nunca e presumida pelo projeto.
+synth: update _synth
+
+_synth:
+> @if [ -z "$(strip $(TARGET_LIBRARY))" ]; then \
+>   echo "Erro: informe a biblioteca com TARGET_LIBRARY=/caminho/celulas.db"; \
+>   exit 1; \
+> fi
+> @if [ ! -f "$(TARGET_LIBRARY)" ]; then \
+>   echo "Erro: biblioteca nao encontrada: $(TARGET_LIBRARY)"; \
+>   exit 1; \
+> fi
+> @mkdir -p "$(SYN_DIR)/logs" "$(SYN_DIR)/reports" \
+>             "$(SYN_DIR)/output" "$(SYN_DIR)/work"
+> @echo "Sintetizando $(SYN_TOP) com clock de $(CLOCK_PERIOD) ns..."
+> @cd "$(SYN_DIR)" && bash -lc 'set -o pipefail; $(DC_ENV); command -v $(DC_BIN) >/dev/null || { echo "Erro: $(DC_BIN) nao foi encontrado. Ajuste DC_ENV ou DC_BIN."; exit 1; }; export DC_MODE=synth DC_TOP="$(SYN_TOP)" CLOCK_PERIOD="$(CLOCK_PERIOD)" TARGET_LIBRARY="$(TARGET_LIBRARY)"; $(DC_BIN) -f dc_nxt.tcl | tee logs/dc_synth.log; exit $${PIPESTATUS[0]}'
+
+clean-synth:
+> @echo "Removendo somente produtos gerados dentro de SYN/..."
+> @rm -rf "$(SYN_DIR)/logs" "$(SYN_DIR)/reports" \
+>          "$(SYN_DIR)/output" "$(SYN_DIR)/work"
+> @echo "Limpeza da sintese concluida."
 
 # Executa primeiro a integracao default e depois cada filelist_<teste>.f.
 # O primeiro erro interrompe a regressao e preserva o log que explica a falha.
