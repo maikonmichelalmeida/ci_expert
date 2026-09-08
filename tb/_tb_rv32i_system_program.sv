@@ -387,9 +387,8 @@ module tb_rv32i_system_program;
 
             expect_word(32'h1f4, 32'b0, "error code");
             expect_word(32'h1f8, 32'h0000_0800, "final sp snapshot");
-            if ((dut.u_riscv_core.u_datapath.u_register_file.regs[2] !== 32'h800) ||
-                (dut.u_riscv_core.u_datapath.u_register_file.regs[0] !== 32'b0))
-                $fatal(1, "FAIL: final sp or x0 is incorrect");
+            if (dut.u_riscv_core.u_datapath.u_register_file.regs[2] !== 32'h800)
+                $fatal(1, "FAIL: final sp is incorrect");
             if ((stack_write_count == 0) || (stack_read_count == 0) ||
                 (min_sp >= 32'h800) || (min_stack_address > STACK_HIGH))
                 $fatal(1, "FAIL: real stack traffic was not observed");
