@@ -298,19 +298,88 @@ run_synthesis() {
     "${args[@]}"
 }
 
+run_top() {
+    local run_dir="$1"
+    local config_file="$run_dir/run_config.txt"
+    if [[ -f "$config_file" ]]; then
+        /usr/bin/awk -F= '$1 == "top" {print substr($0, index($0, "=") + 1); exit}' \
+            "$config_file"
+    fi
+}
+
+run_label() {
+    local run_dir="$1"
+    local run_name top
+    run_name="$(basename "$run_dir")"
+    top="$(run_top "$run_dir")"
+
+    if [[ -z "$top" ]]; then
+        printf '%s [configuracao antiga ou incompleta]' "$run_name"
+    elif discover_modules | /usr/bin/grep -Fxq -- "$top"; then
+        printf '%s [TOP disponivel: %s]' "$run_name" "$top"
+    else
+        printf '%s [HISTORICO: TOP %s nao existe mais]' "$run_name" "$top"
+    fi
+}
+
+discover_runs() {
+    if [[ -d "$SYN_DIR/runs" ]]; then
+        /usr/bin/find "$SYN_DIR/runs" -mindepth 1 -maxdepth 1 -type d -print | \
+            /usr/bin/sort -r
+    fi
+}
+
+print_runs() {
+    local runs=()
+    local index
+    mapfile -t runs < <(discover_runs)
+    if ((${#runs[@]} == 0)); then
+        echo "Nenhum run encontrado em SYN/runs/."
+        return 0
+    fi
+
+    echo "Runs encontrados:"
+    for index in "${!runs[@]}"; do
+        printf "  %2d) %s\n" "$((index + 1))" "$(run_label "${runs[$index]}")"
+        if [[ -f "${runs[$index]}/run_config.txt" ]]; then
+            /usr/bin/awk -F= '
+                $1 == "date"            {date = $2}
+                $1 == "git_sha"         {sha = substr($2, 1, 8)}
+                $1 == "mode"            {mode = $2}
+                $1 == "clock_period"    {clock_period = $2}
+                $1 == "constraint_mode" {constraints = $2}
+                END {
+                    printf "      modo=%s | constraints=%s | clock=%s ns | data=%s | SHA=%s\n",
+                           mode, constraints, clock_period, date, sha
+                }
+            ' "${runs[$index]}/run_config.txt"
+        fi
+    done
+}
+
 choose_run() {
     local runs=()
-    local directory
-    if [[ -d "$SYN_DIR/runs" ]]; then
-        while IFS= read -r directory; do
-            runs+=("$(basename "$directory")")
-        done < <(/usr/bin/find "$SYN_DIR/runs" -mindepth 1 -maxdepth 1 -type d -print | /usr/bin/sort -r)
-    fi
+    local answer index
+    mapfile -t runs < <(discover_runs)
     if ((${#runs[@]} == 0)); then
         echo "Nenhum run encontrado em SYN/runs/."
         return 1
     fi
-    choose_from_array "Escolha o run:" no "${runs[@]}"
+
+    echo "Escolha o run:"
+    for index in "${!runs[@]}"; do
+        printf "  %2d) %s\n" "$((index + 1))" "$(run_label "${runs[$index]}")"
+    done
+    while true; do
+        read -r -p "> " answer || return 1
+        answer="${answer%$'\r'}"
+        if [[ "$answer" =~ ^[0-9]+$ ]] &&
+           ((answer >= 1 && answer <= ${#runs[@]})); then
+            SELECTED="$(basename "${runs[$((answer - 1))]}")"
+            return 0
+        fi
+        echo "Escolha invalida. Digite um numero listado."
+    done
 }
 
 quick_reports() {
@@ -408,9 +477,10 @@ case "${1:---menu}" in
     --menu) dc_menu ;;
     --list-modules) print_modules ;;
     --list-libraries) print_libraries ;;
+    --list-runs) print_runs ;;
     --show-config) show_configuration ;;
     *)
-        echo "Uso: $0 [--menu|--list-modules|--list-libraries|--show-config]" >&2
+        echo "Uso: $0 [--menu|--list-modules|--list-libraries|--list-runs|--show-config]" >&2
         exit 2
         ;;
 esac

@@ -334,14 +334,7 @@ _dc-run:
 > bash -lc 'set -o pipefail; $(DC_ENV); command -v $(DC_BIN) >/dev/null || { echo "Erro: $(DC_BIN) nao foi encontrado. Ajuste DC_ENV ou DC_BIN."; exit 1; }; dc_version="$$( $(DC_BIN) -version 2>&1 | /usr/bin/awk '\''/^dc_shell version/{print; exit}'\'' || true )"; export DC_MODE="'"$$mode"'" DC_TOP="'"$$top"'" DC_RUN_DIR="'"$$run_dir"'" RTL_FILELIST="'"$$generated_filelist"'" GIT_SHA="'"$$git_sha"'" DC_VERSION="$$dc_version" TARGET_LIBRARY="'"$$library"'" MIN_LIBRARY="$(MIN_LIB)" CONSTRAINT_MODE="$(CONSTRAINT_MODE)" COMPILE_STYLE="$(COMPILE_STYLE)" CLOCK_PERIOD="$(CLOCK_PERIOD)" CLOCK_UNCERTAINTY="$(CLOCK_UNCERTAINTY)" CLOCK_LATENCY="$(CLOCK_LATENCY)" CLOCK_TRANSITION="$(CLOCK_TRANSITION)" INPUT_DELAY="$(INPUT_DELAY)" OUTPUT_DELAY="$(OUTPUT_DELAY)" INPUT_TRANSITION="$(INPUT_TRANSITION)" OUTPUT_LOAD="$(OUTPUT_LOAD)" COMB_MAX_DELAY="$(COMB_MAX_DELAY)" TIMING_PATHS="$(TIMING_PATHS)"; $(DC_BIN) -f "$(SYN_DIR)/dc_nxt.tcl" | tee "'"$$run_dir"'/logs/dc.log"; exit $${PIPESTATUS[0]}'
 
 dc-runs:
-> @if [ ! -d "$(SYN_DIR)/runs" ]; then echo "Nenhum run encontrado."; exit 0; fi
-> @while IFS= read -r run_dir; do \
->   [ -n "$$run_dir" ] || continue; \
->   echo "============================================================"; \
->   echo "$$(basename "$$run_dir")"; \
->   [ ! -f "$$run_dir/run_config.txt" ] || \
->     grep -E '^(date|git_sha|dc_version|mode|top|target_library|constraint_mode|clock_period|comb_max_delay|compile_style)=' "$$run_dir/run_config.txt"; \
-> done < <(/usr/bin/find "$(SYN_DIR)/runs" -mindepth 1 -maxdepth 1 -type d -print | /usr/bin/sort -r)
+> @bash "$(DC_EXPLORER)" --list-runs
 
 clean-synth:
 > @set -e; \
