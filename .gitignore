@@ -16,10 +16,7 @@ DVEfiles/
 *.ddc
 *.svf
 work/
-SYN/logs/
-SYN/output/
-SYN/reports/
-SYN/work/
+SYN/runs/
 
 # Local helper scripts - nao versionar
 send.ps1
