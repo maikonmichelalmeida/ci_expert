@@ -33,7 +33,8 @@ CLOCK_PERIOD ?= 10.0
 TARGET_LIBRARY ?=
 LIB ?=
 MIN_LIB ?=
-DC_LIBRARY_DIRS ?= /home/ciexpert/maikon.almeida/curso/03/ref/DBs
+SAED32_PDK_ROOT ?= /pdk/synopsys/saed32/SAED32_EDK
+DC_LIBRARY_DIRS ?= $(SAED32_PDK_ROOT)/lib/stdcell_rvt/db_nldm:$(SAED32_PDK_ROOT)/lib/stdcell_lvt/db_nldm:$(SAED32_PDK_ROOT)/lib/stdcell_hvt/db_nldm
 CONSTRAINT_MODE ?= baseline
 CLOCK_UNCERTAINTY ?= 1.0
 CLOCK_LATENCY ?= 1.0
@@ -59,6 +60,7 @@ TEST_NAMES := $(sort $(patsubst filelist_%.f,%,$(notdir $(wildcard $(RUN_DIR)/fi
 .PHONY: menu rtl-menu dc-menu git-menu help tests show-config status update load check-filelist \
         compile rebuild run system regression log complog verdi clean \
         dc-check dc-synth synth dc-modules dc-libs dc-runs clean-synth \
+        dc-clean-stale dc-clean-all dc-clean-legacy \
         _menu _rtl-menu _git-menu _compile _rebuild _run _regression _verdi _dc-run
 
 # O menu principal atualiza o Git uma unica vez. Os submenus usam alvos com
@@ -177,6 +179,9 @@ help:
 > @echo "  make dc-runs                Lista runs e suas configuracoes"
 > @echo "  make clean                  Remove produtos gerados, preservando os logs"
 > @echo "  make clean-synth RUN_NAME=x Remove somente um run de sintese"
+> @echo "  make dc-clean-stale         Remove runs de TOPs que nao existem mais"
+> @echo "  make dc-clean-all           Remove todos os runs e relatorios de sintese"
+> @echo "  make dc-clean-legacy        Remove residuos do fluxo antigo em SYN/"
 > @echo "  make update                 Atualiza $(GIT_REMOTE)/$(GIT_BRANCH) manualmente"
 > @echo
 > @echo "Opcoes uteis:"
@@ -219,6 +224,7 @@ show-config:
 > @echo "COMPILE_STYLE   = $(COMPILE_STYLE)"
 > @echo "LIB             = $(if $(strip $(LIB)),$(LIB),$(if $(strip $(TARGET_LIBRARY)),$(TARGET_LIBRARY),nao informada))"
 > @echo "MIN_LIB         = $(if $(strip $(MIN_LIB)),$(MIN_LIB),none)"
+> @echo "SAED32_PDK_ROOT = $(SAED32_PDK_ROOT)"
 > @echo "LIBRARY_DIRS    = $(DC_LIBRARY_DIRS)"
 
 status:
@@ -335,6 +341,17 @@ _dc-run:
 
 dc-runs:
 > @bash "$(DC_EXPLORER)" --list-runs
+
+# As limpezas amplas exigem CONFIRM=SIM. O menu pergunta antes de chamar estes
+# alvos; na linha de comando a confirmacao precisa ser escrita explicitamente.
+dc-clean-stale:
+> @CONFIRM="$(CONFIRM)" bash "$(DC_EXPLORER)" --clean-stale-runs
+
+dc-clean-all:
+> @CONFIRM="$(CONFIRM)" bash "$(DC_EXPLORER)" --clean-all-runs
+
+dc-clean-legacy:
+> @CONFIRM="$(CONFIRM)" bash "$(DC_EXPLORER)" --clean-legacy
 
 clean-synth:
 > @set -e; \

@@ -10,8 +10,9 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RTL_DIR="$ROOT/RTL"
 SYN_DIR="$ROOT/SYN"
 MAKE_BIN="${MAKE:-make}"
-DEFAULT_LIBRARY_DIR="/home/ciexpert/maikon.almeida/curso/03/ref/DBs"
-DC_LIBRARY_DIRS="${DC_LIBRARY_DIRS:-$DEFAULT_LIBRARY_DIR}"
+DEFAULT_PDK_ROOT="/pdk/synopsys/saed32/SAED32_EDK"
+DEFAULT_LIBRARY_DIRS="$DEFAULT_PDK_ROOT/lib/stdcell_rvt/db_nldm:$DEFAULT_PDK_ROOT/lib/stdcell_lvt/db_nldm:$DEFAULT_PDK_ROOT/lib/stdcell_hvt/db_nldm"
+DC_LIBRARY_DIRS="${DC_LIBRARY_DIRS:-$DEFAULT_LIBRARY_DIRS}"
 
 SESSION_STYLE="baseline"
 SESSION_PATHS="10"
@@ -40,12 +41,20 @@ discover_modules() {
 }
 
 discover_libraries() {
-    local directory
+    local directory library file_name
     local old_ifs="$IFS"
     IFS=':'
     for directory in $DC_LIBRARY_DIRS; do
         if [[ -d "$directory" ]]; then
-            /usr/bin/find "$directory" -type f -name '*.db' -print
+            while IFS= read -r library; do
+                file_name="${library##*/}"
+                # Mostra somente as bibliotecas-base de RVT, LVT e HVT. Os
+                # arquivos especiais de power gating e level shifters ficam
+                # fora desta lista inicial para nao confundir a escolha.
+                if [[ "$file_name" =~ ^saed32(lvt|rvt|hvt)_(ff|ss|tt)[A-Za-z0-9.]+\.db$ ]]; then
+                    printf '%s\n' "$library"
+                fi
+            done < <(/usr/bin/find "$directory" -maxdepth 1 -type f -name '*.db' -print)
         fi
     done
     IFS="$old_ifs"
@@ -329,6 +338,109 @@ discover_runs() {
     fi
 }
 
+is_historical_run() {
+    local run_dir="$1"
+    local top
+    top="$(run_top "$run_dir")"
+    [[ -z "$top" ]] || ! discover_modules | /usr/bin/grep -Fxq -- "$top"
+}
+
+discover_historical_runs() {
+    local run_dir
+    while IFS= read -r run_dir; do
+        if is_historical_run "$run_dir"; then
+            printf '%s\n' "$run_dir"
+        fi
+    done < <(discover_runs)
+}
+
+historical_run_count() {
+    local runs=()
+    mapfile -t runs < <(discover_historical_runs)
+    printf '%d\n' "${#runs[@]}"
+}
+
+require_cleanup_confirmation() {
+    if [[ "${CONFIRM:-}" != "SIM" ]]; then
+        echo "Limpeza cancelada. Execute novamente com CONFIRM=SIM." >&2
+        return 1
+    fi
+}
+
+remove_run_directory() {
+    local run_dir="$1"
+    local base target
+    base="$(/usr/bin/realpath -m "$SYN_DIR/runs")"
+    target="$(/usr/bin/realpath -m "$run_dir")"
+    case "$target" in
+        "$base"/*) ;;
+        *) echo "Erro: destino fora de SYN/runs: $target" >&2; return 1 ;;
+    esac
+    if [[ -d "$target" ]]; then
+        rm -rf -- "$target"
+        echo "Run removido: $target"
+    fi
+}
+
+clean_stale_runs() {
+    local runs=()
+    local run_dir
+    require_cleanup_confirmation || return 1
+    mapfile -t runs < <(discover_historical_runs)
+    if ((${#runs[@]} == 0)); then
+        echo "Nenhum run historico foi encontrado."
+        return 0
+    fi
+    for run_dir in "${runs[@]}"; do
+        remove_run_directory "$run_dir" || return 1
+    done
+}
+
+clean_all_runs() {
+    local runs=()
+    local run_dir
+    require_cleanup_confirmation || return 1
+    mapfile -t runs < <(discover_runs)
+    if ((${#runs[@]} == 0)); then
+        echo "Nenhum run foi encontrado."
+        return 0
+    fi
+    for run_dir in "${runs[@]}"; do
+        remove_run_directory "$run_dir" || return 1
+    done
+}
+
+clean_legacy_artifacts() {
+    local targets=()
+    local target resolved syn_base
+    require_cleanup_confirmation || return 1
+    syn_base="$(/usr/bin/realpath -m "$SYN_DIR")"
+
+    # Estes nomes pertencem ao fluxo antigo. O fluxo atual guarda tudo dentro
+    # de SYN/runs/<run>, portanto eles podem ser removidos sem tocar no TCL.
+    for target in "$SYN_DIR/output" "$SYN_DIR/reports" "$SYN_DIR/logs" \
+                  "$SYN_DIR/work" "$SYN_DIR/command.log" "$SYN_DIR/default.svf"; do
+        [[ -e "$target" ]] && targets+=("$target")
+    done
+    while IFS= read -r target; do
+        targets+=("$target")
+    done < <(/usr/bin/find "$SYN_DIR" -mindepth 1 -maxdepth 1 -type d -name 'alib-*' -print)
+
+    if ((${#targets[@]} == 0)); then
+        echo "Nenhum residuo do fluxo antigo foi encontrado em SYN/."
+        return 0
+    fi
+    for target in "${targets[@]}"; do
+        resolved="$(/usr/bin/realpath -m "$target")"
+        case "$resolved" in
+            "$syn_base"/*) ;;
+            *) echo "Erro: destino fora de SYN/: $resolved" >&2; return 1 ;;
+        esac
+        rm -rf -- "$resolved"
+        echo "Artefato antigo removido: $resolved"
+    done
+}
+
 print_runs() {
     local runs=()
     local index
@@ -379,6 +491,47 @@ choose_run() {
             return 0
         fi
         echo "Escolha invalida. Digite um numero listado."
+    done
+}
+
+cleanup_menu() {
+    local option answer run_name run_dir stale_count
+    while true; do
+        stale_count="$(historical_run_count)"
+        echo "Limpeza de sintese:"
+        echo "  1) Remover um run escolhido"
+        echo "  2) Remover somente runs historicos ($stale_count encontrado(s))"
+        echo "  3) Remover todos os runs e relatorios"
+        echo "  4) Remover residuos do fluxo antigo fora de SYN/runs"
+        echo "  B) Voltar"
+        read -r -p "Escolha: " option || return
+        option="${option%$'\r'}"
+        case "$option" in
+            1)
+                choose_run || continue
+                run_name="$SELECTED"
+                run_dir="$SYN_DIR/runs/$run_name"
+                read -r -p "Remover o run '$run_name'? Digite SIM: " answer || return
+                [[ "${answer%$'\r'}" == "SIM" ]] && remove_run_directory "$run_dir" || echo "Limpeza cancelada."
+                ;;
+            2)
+                print_runs
+                read -r -p "Remover todos os runs marcados como historicos? Digite SIM: " answer || return
+                [[ "${answer%$'\r'}" == "SIM" ]] && CONFIRM=SIM clean_stale_runs || echo "Limpeza cancelada."
+                ;;
+            3)
+                print_runs
+                read -r -p "Remover TODOS os runs e seus relatorios? Digite SIM: " answer || return
+                [[ "${answer%$'\r'}" == "SIM" ]] && CONFIRM=SIM clean_all_runs || echo "Limpeza cancelada."
+                ;;
+            4)
+                read -r -p "Remover residuos antigos em SYN/? Digite SIM: " answer || return
+                [[ "${answer%$'\r'}" == "SIM" ]] && CONFIRM=SIM clean_legacy_artifacts || echo "Limpeza cancelada."
+                ;;
+            b|B) return ;;
+            *) echo "Opcao invalida." ;;
+        esac
+        echo
     done
 }
 
@@ -439,7 +592,7 @@ advanced_options() {
 }
 
 dc_menu() {
-    local option
+    local option stale_count
     while true; do
         if [[ -t 1 ]]; then
             clear
@@ -454,9 +607,14 @@ dc_menu() {
         echo "  5) Listar bibliotecas encontradas"
         echo "  6) Mostrar configuracao atual"
         echo "  7) Opcoes avancadas de sintese"
+        echo "  8) Limpar runs e artefatos antigos"
         echo
         echo "  B) Voltar"
         echo "============================================================"
+        stale_count="$(historical_run_count)"
+        if ((stale_count > 0)); then
+            echo " Aviso: $stale_count run(s) historico(s) encontrado(s). Use a opcao 8 para limpar."
+        fi
         read -r -p "Escolha: " option || return
         option="${option%$'\r'}"
         case "$option" in
@@ -467,6 +625,7 @@ dc_menu() {
             5) print_libraries || true; pause_menu ;;
             6) show_configuration; pause_menu ;;
             7) advanced_options; pause_menu ;;
+            8) cleanup_menu; pause_menu ;;
             b|B) return ;;
             *) echo "Opcao invalida."; pause_menu ;;
         esac
@@ -478,9 +637,12 @@ case "${1:---menu}" in
     --list-modules) print_modules ;;
     --list-libraries) print_libraries ;;
     --list-runs) print_runs ;;
+    --clean-stale-runs) clean_stale_runs ;;
+    --clean-all-runs) clean_all_runs ;;
+    --clean-legacy) clean_legacy_artifacts ;;
     --show-config) show_configuration ;;
     *)
-        echo "Uso: $0 [--menu|--list-modules|--list-libraries|--list-runs|--show-config]" >&2
+        echo "Uso: $0 [--menu|--list-modules|--list-libraries|--list-runs|--clean-stale-runs|--clean-all-runs|--clean-legacy|--show-config]" >&2
         exit 2
         ;;
 esac

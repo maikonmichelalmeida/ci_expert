@@ -83,6 +83,15 @@ if {$mode eq "synth"} {
         puts stderr "ERRO: TARGET_LIBRARY nao foi informada."
         exit 2
     }
+
+    # Acrescenta ao caminho padrao do DC os diretorios das bibliotecas
+    # selecionadas. Isso segue o setup do PDK sem substituir os caminhos que o
+    # proprio Design Compiler ja utiliza para localizar seus arquivos internos.
+    set library_search_dirs [list [file dirname $target_library_file]]
+    if {$min_library_file ne ""} {
+        lappend library_search_dirs [file dirname $min_library_file]
+    }
+    set_app_var search_path [concat $search_path $library_search_dirs]
     set_app_var target_library [list $target_library_file]
     set_app_var link_library [concat "*" [list $target_library_file]]
     if {$min_library_file ne ""} {
