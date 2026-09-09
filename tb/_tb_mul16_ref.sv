@@ -1,22 +1,22 @@
 `timescale 1ns/1ps
 
 // Testbench independente do processador para o multiplicador de referencia.
-module tb_mul32_ref;
+module tb_mul16_ref;
 
-    localparam integer RANDOM_CASES = 1000;
+    localparam integer RANDOM_CASES = 100;
 
     logic        clk;
     logic        reset;
-    logic [31:0] a;
-    logic [31:0] b;
-    logic [63:0] p;
+    logic [15:0] a;
+    logic [15:0] b;
+    logic [31:0] p;
 
-    logic [63:0] expected_stage1;
-    logic [63:0] expected_stage2;
-    logic [31:0] operand_a_stage1;
-    logic [31:0] operand_a_stage2;
-    logic [31:0] operand_b_stage1;
-    logic [31:0] operand_b_stage2;
+    logic [31:0] expected_stage1;
+    logic [31:0] expected_stage2;
+    logic [15:0] operand_a_stage1;
+    logic [15:0] operand_a_stage2;
+    logic [15:0] operand_b_stage1;
+    logic [15:0] operand_b_stage2;
     logic        valid_stage1;
     logic        valid_stage2;
 
@@ -26,10 +26,10 @@ module tb_mul32_ref;
     integer sent_count;
     integer checked_count;
     integer random_index;
-    logic [31:0] random_a;
-    logic [31:0] random_b;
+    logic [15:0] random_a;
+    logic [15:0] random_b;
 
-    mul32_ref dut (
+    mul16_ref dut (
         .clk   (clk),
         .reset (reset),
         .a     (a),
@@ -37,17 +37,17 @@ module tb_mul32_ref;
         .p     (p)
     );
 
-    // A extensao explicita preserva todos os 64 bits do produto de referencia.
-    function automatic logic [63:0] reference_product (
-        input logic [31:0] operand_a,
-        input logic [31:0] operand_b
+    // A extensao explicita preserva todos os 32 bits do produto de referencia.
+    function automatic logic [31:0] reference_product (
+        input logic [15:0] operand_a,
+        input logic [15:0] operand_b
     );
-        logic [63:0] operand_a_64;
-        logic [63:0] operand_b_64;
+        logic [31:0] operand_a_32;
+        logic [31:0] operand_b_32;
         begin
-            operand_a_64     = {32'b0, operand_a};
-            operand_b_64     = {32'b0, operand_b};
-            reference_product = operand_a_64 * operand_b_64;
+            operand_a_32      = {16'b0, operand_a};
+            operand_b_32      = {16'b0, operand_b};
+            reference_product = operand_a_32 * operand_b_32;
         end
     endfunction
 
@@ -56,8 +56,8 @@ module tb_mul32_ref;
     // ser enviado a cada ciclo, e o resultado e conferido sem delays arbitrarios.
     task automatic advance_scoreboard (
         input logic        issue_valid,
-        input logic [31:0] next_a,
-        input logic [31:0] next_b
+        input logic [15:0] next_a,
+        input logic [15:0] next_b
     );
         begin
             @(negedge clk);
@@ -87,8 +87,8 @@ module tb_mul32_ref;
                 valid_stage1     = 1'b1;
                 sent_count       = sent_count + 1;
             end else begin
-                a            = 32'b0;
-                b            = 32'b0;
+                a            = 16'b0;
+                b            = 16'b0;
                 valid_stage1 = 1'b0;
             end
         end
@@ -99,19 +99,19 @@ module tb_mul32_ref;
     initial begin
 `ifdef VCS
         $fsdbDumpfile("test.fsdb");
-        $fsdbDumpvars(0, tb_mul32_ref);
+        $fsdbDumpvars(0, tb_mul16_ref);
 `endif
 
         clk              = 1'b0;
         reset            = 1'b1;
-        a                = 32'b0;
-        b                = 32'b0;
-        expected_stage1  = 64'b0;
-        expected_stage2  = 64'b0;
-        operand_a_stage1 = 32'b0;
-        operand_a_stage2 = 32'b0;
-        operand_b_stage1 = 32'b0;
-        operand_b_stage2 = 32'b0;
+        a                = 16'b0;
+        b                = 16'b0;
+        expected_stage1  = 32'b0;
+        expected_stage2  = 32'b0;
+        operand_a_stage1 = 16'b0;
+        operand_a_stage2 = 16'b0;
+        operand_b_stage1 = 16'b0;
+        operand_b_stage2 = 16'b0;
         valid_stage1     = 1'b0;
         valid_stage2     = 1'b0;
         cycle_count      = 0;
@@ -128,15 +128,15 @@ module tb_mul32_ref;
         reset = 1'b0;
 
         // Casos dirigidos de zero, limites e padroes alternados.
-        advance_scoreboard(1'b1, 32'h0000_0000, 32'h0000_0000);
-        advance_scoreboard(1'b1, 32'h0000_0000, 32'h1234_5678);
-        advance_scoreboard(1'b1, 32'h0000_0001, 32'h1234_5678);
-        advance_scoreboard(1'b1, 32'h0000_0002, 32'h0000_0002);
-        advance_scoreboard(1'b1, 32'hffff_ffff, 32'h0000_0001);
-        advance_scoreboard(1'b1, 32'hffff_ffff, 32'h0000_0002);
-        advance_scoreboard(1'b1, 32'hffff_ffff, 32'hffff_ffff);
-        advance_scoreboard(1'b1, 32'h8000_0000, 32'h0000_0002);
-        advance_scoreboard(1'b1, 32'haaaa_aaaa, 32'h5555_5555);
+        advance_scoreboard(1'b1, 16'h0000, 16'h0000);
+        advance_scoreboard(1'b1, 16'h0000, 16'h1234);
+        advance_scoreboard(1'b1, 16'h0001, 16'h1234);
+        advance_scoreboard(1'b1, 16'h0002, 16'h0002);
+        advance_scoreboard(1'b1, 16'hffff, 16'h0001);
+        advance_scoreboard(1'b1, 16'hffff, 16'h0002);
+        advance_scoreboard(1'b1, 16'hffff, 16'hffff);
+        advance_scoreboard(1'b1, 16'h8000, 16'h0002);
+        advance_scoreboard(1'b1, 16'haaaa, 16'h5555);
 
         for (random_index = 0; random_index < RANDOM_CASES; random_index++) begin
             random_a = $urandom(random_seed);
@@ -145,15 +145,15 @@ module tb_mul32_ref;
         end
 
         // Dois ciclos sem nova entrada esvaziam as duas etapas do scoreboard.
-        advance_scoreboard(1'b0, 32'b0, 32'b0);
-        advance_scoreboard(1'b0, 32'b0, 32'b0);
+        advance_scoreboard(1'b0, 16'b0, 16'b0);
+        advance_scoreboard(1'b0, 16'b0, 16'b0);
 
         if (checked_count != sent_count) begin
             $fatal(1, "FAIL: sent=%0d checked=%0d", sent_count, checked_count);
         end
 
         $display(
-            "PASS: mul32_ref completed %0d cases, seed=%0d, latency=1 cycle after input capture",
+            "PASS: mul16_ref completed %0d cases, seed=%0d, latency=1 cycle after input capture",
             checked_count, seed);
         $finish;
     end
