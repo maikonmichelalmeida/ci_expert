@@ -3,7 +3,8 @@
 // Testbench independente do processador para o multiplicador de referencia.
 module tb_mul16_ref;
 
-    localparam integer RANDOM_CASES = 100;
+    localparam integer DIRECTED_CASES = 9;
+    localparam integer RANDOM_CASES   = 100;
 
     logic        clk;
     logic        reset;
@@ -70,6 +71,12 @@ module tb_mul16_ref;
                         operand_a_stage2, operand_b_stage2,
                         expected_stage2, p, cycle_count);
                 end
+                if (checked_count < DIRECTED_CASES) begin
+                    $display(
+                        "PASS case %0d: a=%04h b=%04h expected=%08h obtained=%08h cycle=%0d",
+                        checked_count + 1, operand_a_stage2, operand_b_stage2,
+                        expected_stage2, p, cycle_count);
+                end
                 checked_count = checked_count + 1;
             end
 
@@ -128,6 +135,7 @@ module tb_mul16_ref;
         reset = 1'b0;
 
         // Casos dirigidos de zero, limites e padroes alternados.
+        $display("Directed mul16_ref results:");
         advance_scoreboard(1'b1, 16'h0000, 16'h0000);
         advance_scoreboard(1'b1, 16'h0000, 16'h1234);
         advance_scoreboard(1'b1, 16'h0001, 16'h1234);
@@ -153,8 +161,8 @@ module tb_mul16_ref;
         end
 
         $display(
-            "PASS: mul16_ref completed %0d cases, seed=%0d, latency=1 cycle after input capture",
-            checked_count, seed);
+            "PASS: mul16_ref completed %0d directed and %0d random cases, seed=%0d, latency=1 cycle",
+            DIRECTED_CASES, RANDOM_CASES, seed);
         $finish;
     end
 
